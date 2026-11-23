@@ -102,6 +102,7 @@
     .followup label { display:block; font-size:.72rem; font-weight:700; }
     textarea { width:100%; margin-top:6px; padding:10px; resize:vertical; border:1px solid var(--line); border-radius:10px; background:var(--soft); color:var(--text); font-size:1rem; }
     .primary { width:100%; min-height:36px; margin-top:7px; border:0; border-radius:9px; background:var(--blue); color:#fff; font-size:.75rem; font-weight:700; }
+    .primary:disabled { opacity:.45; }
     .empty { min-height:58px; display:grid; place-items:center; border:1px solid var(--line); border-radius:14px; background:var(--surface); color:var(--muted); font-size:.76rem; }
     .update-box { margin-top:16px; overflow:hidden; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:var(--shadow); }
     .update-box summary { min-height:56px; display:flex; align-items:center; justify-content:space-between; padding:10px 12px; list-style:none; }
@@ -143,11 +144,11 @@
         <div id="review-list"></div>
       </section>
       <details class="update-box">
-        <summary><span><h2>거래정보 입력</h2><small>문자·명세서·금액 정정</small></span><span class="toggle" aria-hidden="true"></span></summary>
+        <summary><span><h2>정보 입력</h2><small>금융정보·홈페이지 수정 요청</small></span><span class="toggle" aria-hidden="true"></span></summary>
         <div class="update-body">
-          <textarea id="update-text" rows="5" maxlength="2000" placeholder="카드 거래, 명세서 금액, 정정할 정보를 그대로 붙여넣으세요."></textarea>
-          <button id="update-button" class="primary" type="button">업데이트 요청 저장</button>
-          <small>거래·금액 정보는 자동 반영됩니다. 제목·정렬·화면 구성 변경은 Codex 채팅에서 요청하세요.</small>
+          <textarea id="update-text" rows="5" maxlength="2000" placeholder="금융정보, 정정사항, 홈페이지 수정 요청을 자유롭게 입력하세요."></textarea>
+          <button id="update-button" class="primary" type="button">분석 및 반영 요청</button>
+          <small id="device-status">아이폰 인증 상태를 확인하는 중입니다.</small>
           <div id="update-history" class="update-history" aria-live="polite"></div>
         </div>
       </details>
@@ -174,6 +175,7 @@
     };
     const DB_PATH = "finance_dashboard_2026";
     const BILLING_CYCLE = "2026-12-10";
+    const DEVICE_KEY_NAME = "financeDashboardDeviceKey";
     let records = { transactions:{}, updates:{} };
     let selectedItem = null;
     let firebaseReady = false;
@@ -222,6 +224,19 @@
     ];
 
     function normalizeText(value,maxLength){ return String(value==null?"":value).trim().slice(0,maxLength||2000); }
+    function hex(bytes){ return Array.from(new Uint8Array(bytes)).map(function(value){return value.toString(16).padStart(2,"0");}).join(""); }
+    function activateDevice(){
+      var match=location.hash.match(/^#activate=([a-f0-9]{64})$/i);
+      if(match){try{localStorage.setItem(DEVICE_KEY_NAME,match[1].toLowerCase());history.replaceState(null,"",location.pathname+location.search);}catch(error){}}
+      var active=/^[a-f0-9]{64}$/.test(localStorage.getItem(DEVICE_KEY_NAME)||"");
+      document.getElementById("update-button").disabled=!active;
+      document.getElementById("device-status").textContent=active?"이 아이폰은 등록되었습니다. 입력이 있을 때만 맥의 Codex가 실행됩니다.":"등록되지 않은 기기입니다. 최초 1회 인증 링크를 열어주세요.";
+    }
+    async function signedRequest(deviceKey,text,createdAt){
+      var encoder=new TextEncoder();
+      var key=await crypto.subtle.importKey("raw",encoder.encode(deviceKey),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
+      return hex(await crypto.subtle.sign("HMAC",key,encoder.encode(createdAt+"\n"+text)));
+    }
     function won(value){ return Math.abs(Number(value)||0).toLocaleString("ko-KR")+"원"; }
     function make(tag,className,text){ var node=document.createElement(tag); if(className) node.className=className; if(text!==undefined) node.textContent=text; return node; }
     function effectiveTransactions(){ return Object.assign({},DEFAULT_TRANSACTIONS,records.transactions||{}); }
@@ -368,12 +383,15 @@
       await persistTransaction(key,updated,previous);
     }
     async function saveUpdate(){
-      var area=document.getElementById("update-text"); var text=normalizeText(area.value,2000); if(!text){alert("추가정보를 입력해주세요.");return;}
-      var data={text:text,createdAt:Date.now(),updatedAt:Date.now(),status:"pending"};
+      var area=document.getElementById("update-text"),deviceKey=localStorage.getItem(DEVICE_KEY_NAME)||""; var text=normalizeText(area.value,2000); if(!text){alert("정보를 입력해주세요.");return;}
+      if(!/^[a-f0-9]{64}$/.test(deviceKey)){alert("등록되지 않은 기기입니다.");return;}
+      var createdAt=Date.now(),signature=await signedRequest(deviceKey,text,createdAt);
+      var data={text:text,signature:signature,createdAt:createdAt,updatedAt:createdAt,status:"pending"};
       if(firebaseReady&&firebaseApi){try{var updateRef=firebaseApi.push(firebaseApi.ref(firebaseApi.database,DB_PATH+"/updates")); records.updates[updateRef.key]=data; area.value=""; renderAll(); await firebaseApi.set(updateRef,data);}catch(error){alert("저장하지 못했습니다. 연결 상태를 확인해주세요.");}}
       else {records.updates["local-"+Date.now()]=data;area.value="";alert("오프라인 임시 저장했습니다.");}
     }
     document.getElementById("update-button").addEventListener("click",saveUpdate);
+    activateDevice();
     renderAll();
     (async function(){
       try{
