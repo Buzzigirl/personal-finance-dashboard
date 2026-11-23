@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f4f7fb">
+  <title>11월 자산 관리 현황</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --page:#f4f7fb; --surface:#fff; --soft:#f1f5fa; --line:#dce5ef;
+      --text:#142033; --muted:#6f7f94; --blue:#2775df; --blue-soft:#e8f2ff;
+      --green:#159b70; --green-soft:#e7f8f1; --orange:#e5792d; --orange-soft:#fff0e4;
+      --purple:#7567dd; --red:#c54848; --shadow:0 7px 22px rgba(38,63,96,.07);
+    }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; background:var(--page); color:var(--text); font-family:"Noto Sans KR",system-ui,sans-serif; }
+    button,textarea { font:inherit; }
+    button { cursor:pointer; }
+    .app { width:min(100%,700px); min-height:100vh; margin:0 auto; background:var(--page); }
+    .header { position:sticky; top:0; z-index:20; min-height:78px; display:flex; align-items:flex-end; justify-content:space-between; gap:12px; padding:20px 16px 13px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.95); backdrop-filter:blur(14px); }
+    .header h1 { margin:0; font-size:1.18rem; line-height:1.25; letter-spacing:-.035em; }
+    .header p { margin:3px 0 0; color:var(--muted); font-size:.78rem; }
+    .as-of { flex:none; color:var(--muted); font-size:.78rem; font-weight:500; }
+    main { padding:12px 10px 38px; }
+    .sync { min-height:31px; display:flex; align-items:center; gap:7px; margin-bottom:8px; padding:6px 9px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--muted); font-size:.76rem; }
+    .sync-dot { width:8px; height:8px; border-radius:50%; background:#e5a326; }
+    .sync[data-state="online"] .sync-dot { background:var(--green); }
+    .sync[data-state="offline"] .sync-dot,.sync[data-state="error"] .sync-dot { background:var(--red); }
+    .offline { display:none; margin-bottom:8px; padding:9px 10px; border-radius:10px; background:#fff0f0; color:#934343; font-size:.75rem; line-height:1.5; }
+    .offline.show { display:block; }
+    .summary { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+    .summary-card { min-height:66px; padding:8px 10px; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:var(--shadow); text-align:left; }
+    .summary-card.total { grid-column:1/-1; min-height:70px; border-color:#c8dbf4; background:linear-gradient(135deg,var(--blue-soft),var(--surface)); }
+    .summary-card.pocket { border-color:transparent; background:var(--green-soft); }
+    .summary-card.answer { border:0; background:var(--orange-soft); }
+    .summary-card.answer.clear { border:1px solid var(--line); background:var(--surface); }
+    .summary-label { display:block; color:var(--muted); font-size:.76rem; font-weight:500; }
+    .summary-value { display:block; margin-top:3px; font-size:1.12rem; font-weight:700; letter-spacing:-.035em; }
+    .summary-note { display:block; margin-top:1px; color:var(--muted); font-size:.65rem; line-height:1.35; }
+    .total .summary-value { color:var(--blue); font-size:1.48rem; }
+    .pocket .summary-value,.pocket .summary-note { color:var(--green); }
+    .answer .summary-value,.answer .summary-note { color:var(--orange); }
+    .answer.clear .summary-value,.answer.clear .summary-note { color:var(--text); }
+    .section-head { display:flex; align-items:flex-end; justify-content:space-between; gap:10px; margin:18px 3px 8px; }
+    .section-head h2 { margin:0; font-size:.98rem; }
+    .section-head span { color:var(--muted); font-size:.7rem; }
+    .card-list { display:grid; gap:7px; }
+    .finance-card { overflow:hidden; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:var(--shadow); }
+    .finance-card summary { position:relative; height:74px; display:grid; grid-template-columns:42px minmax(0,1fr) auto 20px; align-items:center; gap:9px; padding:9px 10px; list-style:none; }
+    .finance-card summary::-webkit-details-marker,.update-box summary::-webkit-details-marker { display:none; }
+    .logo { width:42px; height:42px; display:grid; place-items:center; overflow:hidden; border-radius:12px; }
+    .logo img { width:100%; height:100%; display:block; object-fit:cover; border-radius:12px; }
+    .logo.mm-mine { background:#e34d4d; color:#111; }
+    .logo.mm-mom { background:#3778d3; color:#fff; }
+    .logo.mm-mine span,.logo.mm-mom span { font-size:.92rem; font-weight:800; letter-spacing:-.05em; }
+    .card-name { min-width:0; }
+    .card-name small,.card-name strong,.card-value small,.card-value strong { display:block; }
+    .card-name small { color:var(--muted); font-size:.67rem; }
+    .card-name strong { margin-top:2px; overflow:hidden; font-size:.8rem; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+    .card-value { text-align:right; }
+    .card-value strong { font-size:.78rem; white-space:nowrap; }
+    .card-value small { max-width:132px; margin-top:2px; overflow:hidden; color:var(--muted); font-size:.62rem; text-overflow:ellipsis; white-space:nowrap; }
+    .toggle { width:20px; height:20px; display:grid; place-items:center; color:var(--muted); font-size:1rem; }
+    .toggle::before { content:"＋"; }
+    details[open] > summary .toggle::before { content:"−"; }
+    .meter { position:absolute; right:10px; bottom:5px; left:61px; height:3px; overflow:hidden; border-radius:10px; background:#e2e9f1; }
+    .meter i { display:block; width:var(--progress,0%); height:100%; border-radius:inherit; background:var(--meter,var(--blue)); }
+    .detail { padding:2px 11px 9px; border-top:1px solid var(--line); background:var(--soft); }
+    .point { display:grid; grid-template-columns:1fr auto; gap:2px 8px; padding:9px 0; border-bottom:1px solid var(--line); }
+    .point span,.point small { color:var(--muted); font-size:.68rem; }
+    .point strong { font-size:.72rem; }
+    .point small { grid-column:1/-1; }
+    .transactions,.checks { margin:0; padding:0; list-style:none; }
+    .transactions li { min-height:42px; display:grid; grid-template-columns:47px minmax(0,1fr) auto; align-items:center; gap:7px; border-top:1px solid var(--line); }
+    .transactions li:first-child,.checks li:first-child { border-top:0; }
+    .transactions time,.transactions span { color:var(--muted); font-size:.72rem; line-height:1.4; }
+    .transactions strong { font-size:.72rem; white-space:nowrap; }
+    .transactions strong.credit { color:var(--green); }
+    .checks li { min-height:42px; display:grid; grid-template-columns:18px minmax(0,1fr) auto; align-items:center; gap:8px; border-top:1px solid var(--line); }
+    .checks input { width:16px; height:16px; margin:0; accent-color:var(--green); opacity:1; }
+    .checks span,.checks strong { font-size:.71rem; }
+    .checks strong { white-space:nowrap; }
+    .checks em { color:var(--blue); font-size:.65rem; font-style:normal; }
+    .checks small { display:block; margin-top:1px; color:var(--orange); font-size:.64rem; }
+    .pending-row { background:rgba(255,240,228,.72); }
+    .review-card { padding:9px 10px; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:var(--shadow); }
+    .review-card + .review-card { margin-top:7px; }
+    .review-main { margin:0; font-size:.91rem; font-weight:700; line-height:1.4; }
+    .review-question { margin:3px 0 0; color:var(--muted); font-size:.7rem; line-height:1.4; }
+    .owner-buttons { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px; }
+    .owner-buttons button { min-height:34px; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--muted); font-size:.73rem; }
+    .owner-buttons button.selected { border-color:var(--blue); background:var(--blue-soft); color:var(--blue); font-weight:700; }
+    .followup { display:none; margin-top:8px; }
+    .followup.show { display:block; }
+    .followup label { display:block; font-size:.72rem; font-weight:700; }
+    textarea { width:100%; margin-top:6px; padding:10px; resize:vertical; border:1px solid var(--line); border-radius:10px; background:var(--soft); color:var(--text); font-size:1rem; }
+    .primary { width:100%; min-height:36px; margin-top:7px; border:0; border-radius:9px; background:var(--blue); color:#fff; font-size:.75rem; font-weight:700; }
+    .empty { min-height:58px; display:grid; place-items:center; border:1px solid var(--line); border-radius:14px; background:var(--surface); color:var(--muted); font-size:.76rem; }
+    .update-box { margin-top:16px; overflow:hidden; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:var(--shadow); }
+    .update-box summary { min-height:56px; display:flex; align-items:center; justify-content:space-between; padding:10px 12px; list-style:none; }
+    .update-box h2 { margin:0; font-size:.91rem; }
+    .update-box summary small { display:block; margin-top:2px; color:var(--muted); font-size:.65rem; }
+    .update-body { padding:0 11px 11px; border-top:1px solid var(--line); }
+    .update-body > small { display:block; margin-top:6px; color:var(--muted); text-align:center; font-size:.65rem; }
+    .future { margin-top:16px; padding:12px; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:var(--shadow); }
+    .future h2 { margin:0; font-size:.91rem; }
+    .future p { margin:2px 0 10px; color:var(--muted); font-size:.68rem; }
+    .future-grid { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+    .future-item { min-height:44px; display:flex; align-items:center; justify-content:space-between; padding:9px 10px; border-radius:10px; background:var(--soft); }
+    .future-item strong { font-size:.76rem; }
+    .future-item span { color:var(--purple); font-size:.64rem; font-weight:700; }
+    @media (min-width:701px) { .app { margin-top:20px; margin-bottom:20px; overflow:hidden; border-radius:28px; box-shadow:0 24px 70px rgba(34,53,79,.16); } }
+    @media (max-width:360px) { main { padding-left:7px; padding-right:7px; } .finance-card summary { grid-template-columns:38px minmax(0,1fr) auto 18px; } .logo { width:38px; height:38px; } .summary-value { font-size:1rem; } .total .summary-value { font-size:1.32rem; } }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div><h1>11월 자산 관리 현황</h1><p>카드 사용·결제 예정</p></div>
+      <span class="as-of">11.24 기준</span>
+    </header>
+    <main>
+      <div id="sync-status" class="sync" data-state="connecting"><i class="sync-dot"></i><span>연결 중</span></div>
+      <div id="offline-note" class="offline">오프라인 모드입니다. 현재 입력한 내용은 다른 사용자와 공유되지 않으며 새로고침하면 사라질 수 있습니다.</div>
+      <section id="summary" class="summary" aria-label="핵심 현황"></section>
+      <div class="section-head"><h2>카드</h2><span>누르면 상세내역 표시</span></div>
+      <section id="card-list" class="card-list"></section>
+      <section id="review-section">
+        <div class="section-head"><h2>답변 필요</h2><span id="review-caption"></span></div>
+        <div id="review-list"></div>
+      </section>
+      <details class="update-box">
+        <summary><span><h2>추가정보 입력</h2><small>카톡·문자·기타 자료</small></span><span class="toggle" aria-hidden="true"></span></summary>
+        <div class="update-body">
+          <textarea id="update-text" rows="5" maxlength="2000" placeholder="받은 내용이나 정정할 정보를 그대로 붙여넣으세요."></textarea>
+          <button id="update-button" class="primary" type="button">업데이트 요청 저장</button>
+          <small>입력값이 있을 때만 저장하고 반영합니다.</small>
+        </div>
+      </details>
+      <section class="future" aria-label="향후 기능">
+        <h2>향후 기능</h2><p>카드 관리가 안정화된 뒤 순차적으로 연결합니다.</p>
+        <div class="future-grid">
+          <div class="future-item"><strong>대출</strong><span>향후 추진</span></div>
+          <div class="future-item"><strong>자산</strong><span>향후 추진</span></div>
+          <div class="future-item"><strong>증권</strong><span>향후 추진</span></div>
+          <div class="future-item"><strong>카드 혜택</strong><span>향후 추진</span></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyB9i6Z__7cTTZkOD39dnLgUU7dLX3FXMEQ",
+      authDomain: "vacation-planner-22dcf.firebaseapp.com",
+      databaseURL: "https://vacation-planner-22dcf-default-rtdb.firebaseio.com",
+      projectId: "vacation-planner-22dcf",
+      storageBucket: "vacation-planner-22dcf.firebasestorage.app",
+      messagingSenderId: "295250234879",
+      appId: "1:295250234879:web:044ed4cc884ea1df1d2bca"
+    };
+    const DB_PATH = "finance_dashboard_2026";
+    const BILLING_CYCLE = "2026-12-10";
+    let records = { transactions:{}, updates:{} };
+    let selectedItem = null;
+    let firebaseReady = false;
+    let firebaseApi = null;
+    let syncState = "connecting";
+
+    const ICONS = {
+      shinhan:"https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/94/26/68/9426681f-caa0-0f24-0271-15b57dea1e25/AppIcon-0-0-1x_U007emarketing-0-6-0-85-220.png/128x128bb.jpg",
+      naver:"https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/0b/e5/8b/0be58b7f-f75f-5b73-03a4-4768fd89c3cb/AppIcon-0-0-1x_U007epad-0-1-0-sRGB-0-85-220.png/128x128bb.jpg",
+      samsung:"https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/42/17/ed/4217ed82-8dfe-4b51-b9d8-43dcc7734411/AppIcon-0-0-1x_U007emarketing-0-8-0-85-220.png/128x128bb.jpg",
+      kbank:"https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/54/60/58/546058b0-7611-05ca-791b-04bfff2b6597/AppIcon-0-0-1x_U007ephone-0-1-85-220.png/128x128bb.jpg"
+    };
+    const CARDS = [
+      {id:"shinhan",company:"신한카드",name:"국방복지카드",amount:103900,icon:"shinhan",performance:{current:103900,target:170000,label:"월 실적"},point:"복지포인트 없음"},
+      {id:"naver",company:"현대카드",name:"네이버카드 Edition 1",amount:355851,icon:"naver",performance:{current:355851,target:300000,label:"11월 실적"}},
+      {id:"hyundai_mine",company:"현대카드",name:"MM · 내 카드",amount:288500,icon:"mm-mine",note:"10일 결제"},
+      {id:"hyundai_mom",company:"현대카드",name:"MM · 엄마 카드",amount:1330416,icon:"mm-mom",note:"전액 정산"},
+      {id:"samsung",company:"삼성카드",name:"테슬라 할부 카드",amount:764987,icon:"samsung",installment:{paid:8,total:60},note:"2026.4 시작 · 2031.3 종료"},
+      {id:"kbank",company:"케이뱅크",name:"ONE(K-패스) 체크",amount:34000,icon:"kbank",note:"환급 10,940원",excludeFromBill:true}
+    ];
+    const DEFAULT_TRANSACTIONS = {
+      "shinhan-20261123-22000":{cardId:"shinhan",date:"11.23",merchant:"교촌치킨(식사)",amount:22000,billingCycle:BILLING_CYCLE,includedInBase:true},
+      "shinhan-20261122-33900":{cardId:"shinhan",date:"11.22",merchant:"KTX(서울역-구포역)",amount:33900,billingCycle:BILLING_CYCLE,includedInBase:true},
+      "shinhan-20261121-48000":{cardId:"shinhan",date:"11.21",merchant:"스팀게임(에이스컴뱃8)",amount:48000,billingCycle:BILLING_CYCLE,includedInBase:true},
+      "hyundai-mine-20261123-15500":{cardId:"hyundai_mine",recordType:"transaction",status:"approved",date:"11.23",merchant:"네이버페이(구매내용 확인 필요)",amount:15500,billingCycle:BILLING_CYCLE,includedInBase:true,questionRequired:true,resolved:false,owner:"mom"},
+      "hyundai-mine-20261117-183000":{cardId:"hyundai_mine",date:"11.17",merchant:"삼대도매횟집(식사)",amount:183000,billingCycle:BILLING_CYCLE,includedInBase:true},
+      "hyundai-mine-20261112-90000":{cardId:"hyundai_mine",date:"11.12",merchant:"음주측정기 구매",amount:90000,billingCycle:BILLING_CYCLE,includedInBase:true},
+      "hyundai-mom-20261122-17510":{cardId:"hyundai_mom",date:"11.22",merchant:"KCP-쿠팡페이(온라인 구매)",amount:17510,billingCycle:BILLING_CYCLE,includedInBase:true},
+      "hyundai-mom-20261120-aia1":{cardId:"hyundai_mom",date:"11.20",merchant:"AIA생명보험(보험료 1)",amount:30600,billingCycle:BILLING_CYCLE,includedInBase:true},
+      "hyundai-mom-20261120-aia2":{cardId:"hyundai_mom",date:"11.20",merchant:"AIA생명보험(보험료 2)",amount:22493,billingCycle:BILLING_CYCLE,includedInBase:true},
+      "hyundai-mom-20261120-aia3":{cardId:"hyundai_mom",date:"11.20",merchant:"AIA생명보험(보험료 3)",amount:25813,billingCycle:BILLING_CYCLE,includedInBase:true},
+      "hyundai-mom-20261114-hospital":{cardId:"hyundai_mom",date:"11.14",merchant:"청주성모병원(의료비)",amount:513000,billingCycle:BILLING_CYCLE,includedInBase:true},
+      "hyundai-mom-20261114-toys":{cardId:"hyundai_mom",date:"11.14",merchant:"토이저러스 서청주점",amount:109000,billingCycle:BILLING_CYCLE,includedInBase:true},
+      "samsung-202611-installment":{cardId:"samsung",date:"11월",merchant:"테슬라 오토카드할부",amount:764987,billingCycle:BILLING_CYCLE,includedInBase:true},
+      "kbank-202610-transit":{cardId:"kbank",date:"10월",merchant:"후불교통(10월 이용분)",amount:34000,includedInBase:true},
+      "kbank-20261116-refund":{cardId:"kbank",date:"11.16",merchant:"K-패스 환급(10월 이용분)",amount:-10940,includedInBase:true,credit:true}
+    };
+    const FIXED_EXPENSES = [
+      [true,"테슬라 커넥티비티","11월",9900],[true,"SKT 인터넷","11월",16500],
+      [true,"SKT 휴대폰","11월",54250],[true,"유튜브 프리미엄","11월",14500],
+      [true,"쿠팡 구독","11월",7890],[true,"카카오톡 서랍","11월",2500],
+      [true,"자녀 보험","11월",75370],[true,"본인 실손보험","11월",139030],
+      [true,"운전자보험","11월",9941],[true,"아이클라우드","11월",1100],
+      [true,"부산도시가스","10월",11620],[false,"부산도시가스","11월",null,"12월 5~6일 예상"],
+      [true,"쿠팡 · 카드 잘못 사용","11월",11240]
+    ];
+
+    function normalizeText(value,maxLength){ return String(value==null?"":value).trim().slice(0,maxLength||2000); }
+    function won(value){ return Math.abs(Number(value)||0).toLocaleString("ko-KR")+"원"; }
+    function make(tag,className,text){ var node=document.createElement(tag); if(className) node.className=className; if(text!==undefined) node.textContent=text; return node; }
+    function effectiveTransactions(){ return Object.assign({},DEFAULT_TRANSACTIONS,records.transactions||{}); }
+    function cardAmount(card){
+      var total=card.amount;
+      Object.keys(records.transactions||{}).forEach(function(key){
+        var item=records.transactions[key];
+        if(!DEFAULT_TRANSACTIONS[key]&&item.cardId===card.id&&item.billingCycle===BILLING_CYCLE&&item.affectsBill!==false) total+=Number(item.amount)||0;
+      });
+      return total;
+    }
+    function unresolved(){ return Object.entries(effectiveTransactions()).filter(function(entry){ return entry[1].questionRequired&&!entry[1].resolved; }); }
+
+    function renderHeader(){
+      var box=document.getElementById("sync-status");
+      var labels={connecting:"연결 중",online:"실시간 동기화 중",offline:"오프라인 모드",error:"동기화 오류"};
+      box.dataset.state=syncState; box.querySelector("span").textContent=labels[syncState];
+      document.getElementById("offline-note").classList.toggle("show",syncState==="offline"||syncState==="error");
+    }
+    function summaryCard(label,value,note,className){
+      var box=make("article","summary-card "+(className||""));
+      box.append(make("span","summary-label",label),make("strong","summary-value",value));
+      if(note) box.append(make("small","summary-note",note));
+      return box;
+    }
+    function renderSummary(){
+      var host=document.getElementById("summary"); host.replaceChildren();
+      var mine=CARDS.filter(function(card){return card.id!=="hyundai_mom"&&card.id!=="kbank";}).reduce(function(sum,card){return sum+cardAmount(card);},0);
+      var mom=cardAmount(CARDS.find(function(card){return card.id==="hyundai_mom";}));
+      var pocket=cardAmount(CARDS.find(function(card){return card.id==="hyundai_mine";}))+cardAmount(CARDS.find(function(card){return card.id==="shinhan";}));
+      var count=unresolved().length;
+      host.append(summaryCard("12월 10일 전체 카드값",won(mine+mom),"확정 명세서와 신규 승인 문자 반영","total"));
+      host.append(summaryCard("내 카드",won(mine),"신한 · 네이버 · 현대 MM · 삼성",""));
+      host.append(summaryCard("엄마 카드",won(mom),"현대 MM",""));
+      host.append(summaryCard("내 용돈 지출",won(pocket),"잔액: "+won(Math.max(0,400000-pocket)),"pocket"));
+      var answer=make("button","summary-card answer"+(count?"":" clear")); answer.type="button";
+      answer.append(make("span","summary-label","답변 필요"),make("strong","summary-value",count+"건"),make("small","summary-note",count?"확인하기":"확인 완료"));
+      answer.addEventListener("click",function(){document.getElementById("review-section").scrollIntoView({behavior:"smooth",block:"start"});});
+      host.append(answer);
+    }
+    function logoFor(card){
+      var logo=make("span","logo "+(card.icon.indexOf("mm-")===0?card.icon:""));
+      if(card.icon.indexOf("mm-")===0) logo.append(make("span","","MM"));
+      else { var image=document.createElement("img"); image.src=ICONS[card.icon]; image.alt=card.company; logo.append(image); }
+      return logo;
+    }
+    function meterFor(card){
+      if(!card.performance&&!card.installment) return null;
+      var current=card.performance?card.performance.current:card.installment.paid;
+      var target=card.performance?card.performance.target:card.installment.total;
+      var meter=make("span","meter"); meter.style.setProperty("--progress",Math.min(100,current/target*100)+"%");
+      meter.style.setProperty("--meter",card.id==="naver"?"#159b70":"#2775df"); meter.append(make("i")); return meter;
+    }
+    function detailsFor(card){
+      var wrap=make("div","detail");
+      if(card.id==="shinhan"){
+        var point=make("div","point"); point.append(make("span","","복지포인트"),make("strong","","현재 없음"),make("small","","발생 시 복지포인트부터 우선 사용")); wrap.append(point);
+      }
+      if(card.id==="naver"){
+        var checks=make("ul","checks");
+        FIXED_EXPENSES.forEach(function(row){
+          var checked=row[0],label=row[1],month=row[2],amount=row[3],pending=row[4];
+          var li=make("li",checked?"":"pending-row"); var input=document.createElement("input"); input.type="checkbox"; input.checked=checked; input.disabled=true;
+          var text=make("span"); text.append(document.createTextNode(label+" "),make("em","", "["+month+"]")); if(pending) text.append(make("small","",pending));
+          li.append(input,text,make("strong","",amount==null?"미정":won(amount))); checks.append(li);
+        });
+        wrap.append(checks); return wrap;
+      }
+      var list=make("ul","transactions");
+      Object.values(effectiveTransactions()).filter(function(item){return item.cardId===card.id;}).sort(function(a,b){return String(b.date).localeCompare(String(a.date),"ko");}).forEach(function(item){
+        var li=make("li"); li.append(make("time","",item.date||""),make("span","",item.merchant||"확인 필요"),make("strong",item.credit||Number(item.amount)<0?"credit":"",(Number(item.amount)<0?"−":"")+won(item.amount))); list.append(li);
+      });
+      if(card.id==="kbank"){ var burden=make("li"); burden.append(make("time","","부담"),make("span","","실제 교통비"),make("strong","",won(23060))); list.append(burden); }
+      wrap.append(list); return wrap;
+    }
+    function renderList(){
+      var host=document.getElementById("card-list"); var openIds=new Set(Array.from(host.querySelectorAll("details[open]")).map(function(node){return node.dataset.cardId;})); host.replaceChildren();
+      CARDS.forEach(function(card){
+        var details=make("details","finance-card"); details.dataset.cardId=card.id; if(openIds.has(card.id)||(!openIds.size&&card.id==="naver")) details.open=true;
+        var summary=document.createElement("summary"); var name=make("span","card-name"); name.append(make("small","",card.company),make("strong","",card.name));
+        var value=make("span","card-value"); value.append(make("strong","",won(cardAmount(card))));
+        var note=card.note||card.point||"";
+        if(card.performance) note=card.performance.label+" "+card.performance.current.toLocaleString("ko-KR")+" / "+card.performance.target.toLocaleString("ko-KR")+"원";
+        if(card.installment) note=card.note+" · "+card.installment.paid+"/"+card.installment.total+"회";
+        value.append(make("small","",note)); summary.append(logoFor(card),name,value,make("span","toggle"));
+        var meter=meterFor(card); if(meter) summary.append(meter);
+        details.append(summary,detailsFor(card)); host.append(details);
+      });
+    }
+    function renderForm(){
+      var host=document.getElementById("review-list"); host.replaceChildren(); var items=unresolved();
+      document.getElementById("review-caption").textContent=items.length?"현대 MM 임시 분류 "+items.length+"건":"확인 완료";
+      if(!items.length){host.append(make("div","empty","답변할 항목이 없습니다.")); return;}
+      items.forEach(function(entry){
+        var key=entry[0],item=entry[1]; var box=make("article","review-card"); box.dataset.key=key;
+        var merchant=String(item.merchant||"확인 필요").replace("(구매내용 확인 필요)","");
+        box.append(make("h3","review-main",(item.date||"")+" · "+merchant+" · "+won(item.amount)));
+        box.append(make("p","review-question","엄마 카드로 임시 반영했습니다. 누구의 사용인가요?"));
+        var buttons=make("div","owner-buttons"); var follow=make("div","followup");
+        ["mine","mom"].forEach(function(owner){
+          var button=make("button",owner===(item.owner||"mom")?"selected":"",owner==="mine"?"내 카드":"엄마 카드"); button.type="button"; button.dataset.owner=owner;
+          button.addEventListener("click",function(){selectedItem={key:key,owner:owner}; Array.from(buttons.children).forEach(function(node){node.classList.remove("selected");}); button.classList.add("selected"); follow.classList.toggle("show",owner==="mine");});
+          buttons.append(button);
+        });
+        var label=make("label","","무엇을 구매했나요?"); var area=document.createElement("textarea"); area.rows=2; area.maxLength=120; area.placeholder="예: 생활용품 구매"; follow.append(label,area);
+        var save=make("button","primary","확정 저장"); save.type="button"; save.addEventListener("click",function(){saveAnswer(key,buttons.querySelector(".selected").dataset.owner,area.value);});
+        box.append(buttons,follow,save); host.append(box);
+      });
+    }
+    function renderAll(){ renderHeader(); renderForm(); renderList(); renderSummary(); }
+    async function saveAnswer(key,owner,detail){
+      var current=effectiveTransactions()[key]; if(!current) return;
+      var cleaned=normalizeText(detail,120); if(owner==="mine"&&!cleaned){alert("내 카드 사용이면 구매 내용을 입력해주세요.");return;}
+      var updated=Object.assign({},current,{cardId:owner==="mine"?"hyundai_mine":"hyundai_mom",owner:owner,resolved:true,questionRequired:false,detail:cleaned,updatedAt:Date.now()});
+      if(firebaseReady&&firebaseApi){try{await firebaseApi.set(firebaseApi.ref(firebaseApi.database,DB_PATH+"/transactions/"+key),updated);}catch(error){alert("저장하지 못했습니다. 연결 상태를 확인해주세요.");}}
+      else {records.transactions[key]=updated;renderAll();}
+    }
+    async function saveUpdate(){
+      var area=document.getElementById("update-text"); var text=normalizeText(area.value,2000); if(!text){alert("추가정보를 입력해주세요.");return;}
+      var data={text:text,createdAt:Date.now(),updatedAt:Date.now(),status:"pending"};
+      if(firebaseReady&&firebaseApi){try{await firebaseApi.push(firebaseApi.ref(firebaseApi.database,DB_PATH+"/updates"),data);area.value="";alert("저장했습니다.");}catch(error){alert("저장하지 못했습니다. 연결 상태를 확인해주세요.");}}
+      else {records.updates["local-"+Date.now()]=data;area.value="";alert("오프라인 임시 저장했습니다.");}
+    }
+    document.getElementById("update-button").addEventListener("click",saveUpdate);
+    renderAll();
+    (async function(){
+      try{
+        var appModule=await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js");
+        var dbModule=await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js");
+        var database=dbModule.getDatabase(appModule.initializeApp(firebaseConfig));
+        firebaseApi={database:database,ref:dbModule.ref,push:dbModule.push,set:dbModule.set,update:dbModule.update,remove:dbModule.remove};
+        var dataRef=dbModule.ref(database,DB_PATH);
+        dbModule.onValue(dataRef,function(snapshot){
+          records={transactions:{},updates:{}};
+          if(snapshot.exists()){var value=snapshot.val()||{}; records.transactions=value.transactions||{}; records.updates=value.updates||{};}
+          firebaseReady=true; syncState="online"; renderAll();
+        },function(){firebaseReady=false;syncState="error";renderAll();});
+      }catch(error){firebaseReady=false;syncState="offline";renderAll();}
+    })();
+  </script>
+</body>
+</html>
