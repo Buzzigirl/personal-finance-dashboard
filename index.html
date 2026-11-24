@@ -90,6 +90,7 @@
     .expense-value small { color:var(--muted); white-space:nowrap; }
     .pending-row .expense-value small { color:var(--orange); }
     .pending-row { background:rgba(255,240,228,.72); }
+    .detail-title { margin:9px 0 3px; color:var(--muted); font-size:.68rem; font-weight:700; }
     .review-card { padding:9px 10px; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:var(--shadow); }
     .review-card + .review-card { margin-top:7px; }
     .review-main { margin:0; font-size:.91rem; font-weight:700; line-height:1.4; }
@@ -211,19 +212,24 @@
       "hyundai-mom-20261120-aia3":{cardId:"hyundai_mom",date:"11.20",merchant:"AIA생명보험(보험료 3)",amount:25813,billingCycle:BILLING_CYCLE,includedInBase:true},
       "hyundai-mom-20261114-hospital":{cardId:"hyundai_mom",date:"11.14",merchant:"청주성모병원(의료비)",amount:513000,billingCycle:BILLING_CYCLE,includedInBase:true},
       "hyundai-mom-20261114-toys":{cardId:"hyundai_mom",date:"11.14",merchant:"토이저러스 서청주점",amount:109000,billingCycle:BILLING_CYCLE,includedInBase:true},
+      "naver-extra-20261107-11240":{cardId:"naver",recordType:"transaction",status:"approved",date:"11.07",merchant:"쿠팡 일반결제 (카드 착오 사용)",amount:11240,billingCycle:BILLING_CYCLE,includedInBase:true,resolved:true,questionRequired:false,owner:"mine",naverExtra:true},
+      "naver-extra-20261112-9900":{cardId:"naver",recordType:"transaction",status:"approved",date:"11.12",merchant:"쿠팡페이 결제 (내용 확인 필요)",amount:9900,billingCycle:BILLING_CYCLE,includedInBase:true,resolved:false,questionRequired:true,questionType:"detail",owner:"mine",ownerResolved:true,naverExtra:true},
       "samsung-202611-installment":{cardId:"samsung",date:"11월",merchant:"테슬라 오토카드할부",amount:764987,billingCycle:BILLING_CYCLE,includedInBase:true},
       "kbank-202610-transit":{cardId:"kbank",date:"10월",merchant:"후불교통(10월 이용분)",amount:34000,includedInBase:true},
       "kbank-20261116-refund":{cardId:"kbank",date:"11.16",merchant:"K-패스 환급(10월 이용분)",amount:-10940,includedInBase:true,credit:true}
     };
     const FIXED_EXPENSES = [
-      [true,"부산도시가스 자동이체","10월 사용분",11620,"11.05"],
-      [true,"쿠팡 일반결제 (카드 착오·한국정보통신)","11월 결제",11240,"11.07"],[true,"iCloud+ 구독 (KCP·Apple)","11월 구독",1100,"11.09"],
-      [true,"이현이 어린이보험 (현대해상화재보험)","11월 보험료",75370,"11.10"],[true,"최영현 실손보험 (한화손해보험)","11월 보험료",139030,"11.11"],
-      [true,"최영현 운전자보험 (한화손해보험)","11월 보험료",9941,"11.11"],[true,"쿠팡페이 결제 (내용 확인 필요)","11월 결제",9900,"11.12"],
-      [true,"카카오톡 톡서랍 (KCP·Apple)","11월 구독",2500,"11.12"],[true,"SKT 인터넷 요금","11월 요금",16500,"11.14"],
-      [true,"SKT 휴대폰 요금 (M포인트 적용)","11월 요금",54250,"11.14"],[true,"YouTube Premium (SKT·네이버파이낸셜)","11월 구독",14500,"11.15"],
-      [true,"테슬라 커넥티비티 (KCP·Tesla Motors)","11월 구독",9900,"11.16"],
-      [true,"쿠팡 로켓와우 멤버십","11월 구독",7890,"11.24"]
+      {id:"gas",label:"관사 도시가스",amount:11620,day:"05~06",paid:"11.05",previousMonth:true,aliases:["부산도시가스"]},
+      {id:"icloud",label:"애플 아이클라우드",amount:1100,day:"09",paid:"11.09",aliases:["apple","아이클라우드"]},
+      {id:"child-insurance",label:"최이현 어린이보험 (현대해상)",amount:75370,day:"10",paid:"11.10",aliases:["현대해상"]},
+      {id:"indemnity",label:"최영현 실손보험 (한화)",amount:139030,day:"11",paid:"11.11",aliases:["한화손해보험"]},
+      {id:"driver",label:"최영현 운전자보험 (한화)",amount:9941,day:"11",paid:"11.11",aliases:["한화손해보험"]},
+      {id:"talk-drawer",label:"카카오톡 톡서랍",amount:2500,day:"12",paid:"11.12",aliases:["apple","톡서랍"]},
+      {id:"internet",label:"SKT 인터넷 요금",amount:16500,day:"14",paid:"11.14",aliases:["sk텔레콤유선서비스","인터넷"]},
+      {id:"mobile",label:"SKT 휴대폰 요금",amount:54250,day:"14",paid:"11.14",aliases:["skt","휴대폰"]},
+      {id:"youtube",label:"유튜브 프리미엄",amount:14500,day:"15",paid:"11.15",aliases:["네이버파이낸셜","유튜브"]},
+      {id:"tesla",label:"테슬라 커넥티비티",amount:9900,day:"16",paid:"11.16",aliases:["tesla motors","테슬라"]},
+      {id:"coupang-wow",label:"쿠팡 로켓와우",amount:7890,day:"24",paid:"11.24",aliases:["쿠팡"]}
     ];
 
     function normalizeText(value,maxLength){ return String(value==null?"":value).trim().slice(0,maxLength||2000); }
@@ -254,6 +260,28 @@
     function won(value){ return Math.abs(Number(value)||0).toLocaleString("ko-KR")+"원"; }
     function make(tag,className,text){ var node=document.createElement(tag); if(className) node.className=className; if(text!==undefined) node.textContent=text; return node; }
     function effectiveTransactions(){ return Object.assign({},DEFAULT_TRANSACTIONS,records.transactions||{}); }
+    function month2(value){ return String(value).padStart(2,"0"); }
+    function fixedPayment(row,month){
+      var prefix=month2(month)+".";
+      var live=Object.values(effectiveTransactions()).find(function(item){
+        if(item.cardId!=="naver"||!String(item.date||"").startsWith(prefix)) return false;
+        var text=String((item.detail||"")+" "+(item.merchant||"")).toLowerCase();
+        var aliasMatch=row.aliases.some(function(alias){return text.indexOf(alias.toLowerCase())>=0;});
+        var amountMatch=row.id==="gas"||Math.abs(Number(item.amount)||0)===row.amount;
+        return aliasMatch&&amountMatch;
+      });
+      if(live) return {checked:true,date:live.date};
+      if(String(row.paid||"").startsWith(prefix)) return {checked:true,date:row.paid};
+      return {checked:false,date:month2(month)+"."+row.day};
+    }
+    function matchesFixedExpense(item){
+      var month=Number(String(item.date||"").slice(0,2));
+      if(!month) return false;
+      return FIXED_EXPENSES.some(function(row){
+        var text=String((item.detail||"")+" "+(item.merchant||"")).toLowerCase();
+        return row.aliases.some(function(alias){return text.indexOf(alias.toLowerCase())>=0;})&&(row.id==="gas"||Math.abs(Number(item.amount)||0)===row.amount);
+      });
+    }
     function cardAmount(card){
       var total=card.amount;
       Object.values(effectiveTransactions()).forEach(function(item){
@@ -298,7 +326,7 @@
     }
     function meterFor(card){
       if(!card.performance&&!card.installment) return null;
-      var current=card.performance?card.performance.current:card.installment.paid;
+      var current=card.performance?(card.id==="naver"?cardAmount(card):card.performance.current):card.installment.paid;
       var target=card.performance?card.performance.target:card.installment.total;
       var meter=make("span","meter"); meter.style.setProperty("--progress",Math.min(100,current/target*100)+"%");
       meter.style.setProperty("--meter",card.id==="naver"?"#159b70":"#2775df"); meter.append(make("i")); return meter;
@@ -311,13 +339,28 @@
       if(card.id==="naver"){
         var checks=make("ul","checks");
         FIXED_EXPENSES.forEach(function(row){
-          var checked=row[0],label=row[1],month=row[2],amount=row[3],paymentDate=row[4];
+          var currentMonth=new Date().getMonth()+1,state=fixedPayment(row,currentMonth),checked=state.checked;
+          var usageMonth=row.previousMonth?(currentMonth===1?12:currentMonth-1):currentMonth;
+          var month=usageMonth+"월 "+(row.previousMonth?"사용분":""),paymentDate=state.date;
           var li=make("li",checked?"":"pending-row"); var input=document.createElement("input"); input.type="checkbox"; input.checked=checked; input.disabled=true;
-          var text=make("span"); text.append(document.createTextNode(label+" "),make("em","", "["+month+"]"));
-          var value=make("span","expense-value"); value.append(make("strong","",amount==null?"미정":won(amount)),make("small","",checked?"결제일 "+paymentDate:"결제예상일 "+paymentDate+" 예상"));
+          var text=make("span"); text.append(document.createTextNode(row.label+" "),make("em","", "["+month.trim()+"]"));
+          var value=make("span","expense-value"); value.append(make("strong","",won(row.amount)),make("small","",checked?"결제일 "+paymentDate:"결제예상일 "+paymentDate+" 예상"));
           li.append(input,text,value); checks.append(li);
         });
-        wrap.append(checks); return wrap;
+        wrap.append(checks);
+        var extras=Object.values(effectiveTransactions()).filter(function(item){return item.cardId==="naver"&&item.affectsBill!==false&&!matchesFixedExpense(item);}).sort(function(a,b){return String(a.date).localeCompare(String(b.date),"ko");});
+        if(extras.length){
+          wrap.append(make("h4","detail-title","기타 결제"));
+          var extraList=make("ul","transactions");
+          extras.forEach(function(item){
+            var merchant=item.detail?item.detail:item.merchant;
+            var li=make("li",item.questionRequired&&!item.resolved?"pending-row":"");
+            li.append(make("time","",item.date||""),make("span","",merchant||"확인 필요"),make("strong",Number(item.amount)<0?"credit":"",(Number(item.amount)<0?"−":"")+won(item.amount)));
+            extraList.append(li);
+          });
+          wrap.append(extraList);
+        }
+        return wrap;
       }
       var list=make("ul","transactions");
       Object.values(effectiveTransactions()).filter(function(item){return item.cardId===card.id;}).sort(function(a,b){return String(a.date).localeCompare(String(b.date),"ko");}).forEach(function(item){
@@ -334,7 +377,7 @@
         var summary=document.createElement("summary"); var name=make("span","card-name"); name.append(make("small","",card.company),make("strong","",card.name));
         var value=make("span","card-value"); value.append(make("strong","",won(cardAmount(card))));
         var note=card.note||card.point||"";
-        if(card.performance) note=card.performance.label+" "+card.performance.current.toLocaleString("ko-KR")+" / "+card.performance.target.toLocaleString("ko-KR")+"원";
+        if(card.performance){var performanceCurrent=card.id==="naver"?cardAmount(card):card.performance.current;note=card.performance.label+" "+performanceCurrent.toLocaleString("ko-KR")+" / "+card.performance.target.toLocaleString("ko-KR")+"원";}
         if(card.installment) note=card.note+" · "+card.installment.paid+"/"+card.installment.total+"회";
         value.append(make("small","",note)); summary.append(logoFor(card),name,value,make("span","toggle"));
         var meter=meterFor(card); if(meter) summary.append(meter);
@@ -343,7 +386,7 @@
     }
     function renderForm(){
       var host=document.getElementById("review-list"); host.replaceChildren(); var items=unresolved();
-      document.getElementById("review-caption").textContent=items.length?"현대 MM 임시 분류 "+items.length+"건":"확인 완료";
+      document.getElementById("review-caption").textContent=items.length?"확인 필요한 결제 "+items.length+"건":"확인 완료";
       if(!items.length){host.append(make("div","empty","답변할 항목이 없습니다.")); return;}
       items.forEach(function(entry){
         var key=entry[0],item=entry[1]; var box=make("article","review-card"); box.dataset.key=key;
