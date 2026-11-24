@@ -24,12 +24,11 @@
     .header { position:sticky; top:0; z-index:20; min-height:78px; display:flex; align-items:flex-end; justify-content:space-between; gap:12px; padding:20px 16px 13px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.95); backdrop-filter:blur(14px); }
     .header h1 { margin:0; font-size:1.18rem; line-height:1.25; letter-spacing:-.035em; }
     .header p { margin:3px 0 0; color:var(--muted); font-size:.78rem; }
-    .as-of { flex:none; color:var(--muted); font-size:.72rem; font-weight:500; white-space:nowrap; }
+    .header-sync { flex:none; display:flex; align-items:center; gap:6px; color:var(--muted); font-size:.72rem; font-weight:500; white-space:nowrap; }
     main { padding:12px 10px 38px; }
-    .sync { min-height:31px; display:flex; align-items:center; gap:7px; margin-bottom:8px; padding:6px 9px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--muted); font-size:.76rem; }
     .sync-dot { width:8px; height:8px; border-radius:50%; background:#e5a326; }
-    .sync[data-state="online"] .sync-dot { background:var(--green); }
-    .sync[data-state="offline"] .sync-dot,.sync[data-state="error"] .sync-dot { background:var(--red); }
+    .header-sync[data-state="online"] .sync-dot { background:var(--green); }
+    .header-sync[data-state="offline"] .sync-dot,.header-sync[data-state="error"] .sync-dot { background:var(--red); }
     .offline { display:none; margin-bottom:8px; padding:9px 10px; border-radius:10px; background:#fff0f0; color:#934343; font-size:.75rem; line-height:1.5; }
     .offline.show { display:block; }
     .summary { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
@@ -132,10 +131,9 @@
   <div class="app">
     <header class="header">
       <div><h1>11월 자산 관리 현황</h1><p>카드 사용·결제 예정</p></div>
-      <span id="as-of" class="as-of">11.24 기준 · 14:42 기준</span>
+      <span id="sync-status" class="header-sync" data-state="connecting"><span>11.24. --:-- 연결 중</span><i class="sync-dot" aria-hidden="true"></i></span>
     </header>
     <main>
-      <div id="sync-status" class="sync" data-state="connecting"><i class="sync-dot"></i><span>연결 중</span></div>
       <div id="offline-note" class="offline">오프라인 모드입니다. 현재 입력한 내용은 다른 사용자와 공유되지 않으며 새로고침하면 사라질 수 있습니다.</div>
       <section id="summary" class="summary" aria-label="핵심 현황"></section>
       <div class="section-head"><h2>카드</h2><span>누르면 상세내역 표시</span></div>
@@ -176,12 +174,12 @@
     };
     const DB_PATH = "finance_dashboard_2026";
     const BILLING_CYCLE = "2026-12-10";
-    const LAST_STATIC_UPDATE_AT = Date.parse("2026-11-24T14:42:00+09:00");
     let records = { transactions:{}, updates:{} };
     let selectedItem = null;
     let firebaseReady = false;
     let firebaseApi = null;
     let syncState = "connecting";
+    let lastSyncedAt = null;
 
     const ICONS = {
       shinhan:"https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/94/26/68/9426681f-caa0-0f24-0271-15b57dea1e25/AppIcon-0-0-1x_U007emarketing-0-6-0-85-220.png/128x128bb.jpg",
@@ -262,20 +260,13 @@
       return total;
     }
     function unresolved(){ return Object.entries(effectiveTransactions()).filter(function(entry){ return entry[1].questionRequired&&!entry[1].resolved; }); }
-    function latestContentUpdateAt(){
-      var latest=LAST_STATIC_UPDATE_AT;
-      Object.values(records.transactions||{}).forEach(function(item){ latest=Math.max(latest,Number(item.updatedAt)||Number(item.createdAt)||0); });
-      Object.values(records.updates||{}).forEach(function(item){ if(item.status==="processed") latest=Math.max(latest,Number(item.processedAt)||Number(item.updatedAt)||0); });
-      return latest;
-    }
-
     function renderHeader(){
       var box=document.getElementById("sync-status");
-      var labels={connecting:"연결 중",online:"실시간 동기화 중",offline:"오프라인 모드",error:"동기화 오류"};
-      box.dataset.state=syncState; box.querySelector("span").textContent=labels[syncState];
+      var synced=lastSyncedAt&&new Date(lastSyncedAt),date=synced?month2(synced.getMonth()+1)+"."+month2(synced.getDate())+".":"11.24.";
+      var time=synced?month2(synced.getHours())+":"+month2(synced.getMinutes()):"--:--";
+      var labels={connecting:"연결 중",online:"동기화",offline:"오프라인",error:"동기화 오류"};
+      box.dataset.state=syncState; box.querySelector("span").textContent=date+" "+time+" "+labels[syncState];
       document.getElementById("offline-note").classList.toggle("show",syncState==="offline"||syncState==="error");
-      var updated=new Date(latestContentUpdateAt());
-      document.getElementById("as-of").textContent="11.24 기준 · "+String(updated.getHours()).padStart(2,"0")+":"+String(updated.getMinutes()).padStart(2,"0")+" 기준";
     }
     function summaryCard(label,value,note,className){
       var box=make("article","summary-card "+(className||""));
@@ -437,7 +428,7 @@
         dbModule.onValue(dataRef,function(snapshot){
           records={transactions:{},updates:{}};
           if(snapshot.exists()){var value=snapshot.val()||{}; records.transactions=value.transactions||{}; records.updates=value.updates||{};}
-          firebaseReady=true; syncState="online"; renderAll();
+          firebaseReady=true; syncState="online"; lastSyncedAt=Date.now(); renderAll();
         },function(){firebaseReady=false;syncState="error";renderAll();});
       }catch(error){firebaseReady=false;syncState="offline";renderAll();}
     })();
