@@ -24,7 +24,7 @@
     .header { position:sticky; top:0; z-index:20; min-height:78px; display:flex; align-items:flex-end; justify-content:space-between; gap:12px; padding:20px 16px 13px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.95); backdrop-filter:blur(14px); }
     .header h1 { margin:0; font-size:1.18rem; line-height:1.25; letter-spacing:-.035em; }
     .header p { margin:3px 0 0; color:var(--muted); font-size:.78rem; }
-    .as-of { flex:none; color:var(--muted); font-size:.78rem; font-weight:500; }
+    .as-of { flex:none; color:var(--muted); font-size:.72rem; font-weight:500; white-space:nowrap; }
     main { padding:12px 10px 38px; }
     .sync { min-height:31px; display:flex; align-items:center; gap:7px; margin-bottom:8px; padding:6px 9px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--muted); font-size:.76rem; }
     .sync-dot { width:8px; height:8px; border-radius:50%; background:#e5a326; }
@@ -104,7 +104,6 @@
     textarea { width:100%; margin-top:6px; padding:10px; resize:vertical; border:1px solid var(--line); border-radius:10px; background:var(--soft); color:var(--text); font-size:1rem; }
     .primary { width:100%; min-height:36px; margin-top:7px; border:0; border-radius:9px; background:var(--blue); color:#fff; font-size:.75rem; font-weight:700; }
     .primary:disabled { opacity:.45; }
-    .device-register { width:100%; min-height:36px; margin-top:7px; border:1px solid var(--blue); border-radius:9px; background:var(--blue-soft); color:var(--blue); font-size:.75rem; font-weight:700; }
     .empty { min-height:58px; display:grid; place-items:center; border:1px solid var(--line); border-radius:14px; background:var(--surface); color:var(--muted); font-size:.76rem; }
     .update-box { margin-top:16px; overflow:hidden; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:var(--shadow); }
     .update-box summary { min-height:56px; display:flex; align-items:center; justify-content:space-between; padding:10px 12px; list-style:none; }
@@ -133,7 +132,7 @@
   <div class="app">
     <header class="header">
       <div><h1>11월 자산 관리 현황</h1><p>카드 사용·결제 예정</p></div>
-      <span class="as-of">11.24 기준</span>
+      <span id="as-of" class="as-of">11.24 기준 · 14:42 기준</span>
     </header>
     <main>
       <div id="sync-status" class="sync" data-state="connecting"><i class="sync-dot"></i><span>연결 중</span></div>
@@ -149,9 +148,8 @@
         <summary><span><h2>정보 입력</h2><small>금융정보·홈페이지 수정 요청</small></span><span class="toggle" aria-hidden="true"></span></summary>
         <div class="update-body">
           <textarea id="update-text" rows="5" maxlength="2000" placeholder="금융정보, 정정사항, 홈페이지 수정 요청을 자유롭게 입력하세요."></textarea>
-          <button id="device-register" class="device-register" type="button">이 아이폰 등록 요청</button>
           <button id="update-button" class="primary" type="button">분석 및 반영 요청</button>
-          <small id="device-status">아이폰 인증 상태를 확인하는 중입니다.</small>
+          <small>입력하면 맥의 Codex가 분석하여 거래 또는 홈페이지 수정 요청으로 처리합니다.</small>
           <div id="update-history" class="update-history" aria-live="polite"></div>
         </div>
       </details>
@@ -178,7 +176,7 @@
     };
     const DB_PATH = "finance_dashboard_2026";
     const BILLING_CYCLE = "2026-12-10";
-    const DEVICE_PROFILE_NAME = "financeDashboardDeviceProfile";
+    const LAST_STATIC_UPDATE_AT = Date.parse("2026-11-24T14:42:00+09:00");
     let records = { transactions:{}, updates:{} };
     let selectedItem = null;
     let firebaseReady = false;
@@ -193,7 +191,7 @@
     };
     const CARDS = [
       {id:"shinhan",company:"신한카드",name:"국방복지카드",amount:103900,icon:"shinhan",performance:{current:103900,target:170000,label:"월 실적"},point:"복지포인트 없음"},
-      {id:"naver",company:"현대카드",name:"네이버카드 Edition 1",amount:355851,icon:"naver",performance:{current:355851,target:300000,label:"11월 실적"}},
+      {id:"naver",company:"현대카드",name:"네이버카드 Edition 1",amount:334711,icon:"naver",performance:{current:334711,target:300000,label:"11월 실적"}},
       {id:"hyundai_mine",company:"현대카드",name:"MM · 내 카드",amount:273000,icon:"mm-mine",note:"10일 결제"},
       {id:"hyundai_mom",company:"현대카드",name:"MM · 엄마 카드",amount:1330416,icon:"mm-mom",note:"전액 정산"},
       {id:"samsung",company:"삼성카드",name:"테슬라 할부 카드",amount:764987,icon:"samsung",installment:{paid:8,total:60},note:"2026.4 시작 · 2031.3 종료"},
@@ -212,8 +210,6 @@
       "hyundai-mom-20261120-aia3":{cardId:"hyundai_mom",date:"11.20",merchant:"AIA생명보험(보험료 3)",amount:25813,billingCycle:BILLING_CYCLE,includedInBase:true},
       "hyundai-mom-20261114-hospital":{cardId:"hyundai_mom",date:"11.14",merchant:"청주성모병원(의료비)",amount:513000,billingCycle:BILLING_CYCLE,includedInBase:true},
       "hyundai-mom-20261114-toys":{cardId:"hyundai_mom",date:"11.14",merchant:"토이저러스 서청주점",amount:109000,billingCycle:BILLING_CYCLE,includedInBase:true},
-      "naver-extra-20261107-11240":{cardId:"naver",recordType:"transaction",status:"approved",date:"11.07",merchant:"쿠팡 일반결제 (카드 착오 사용)",amount:11240,billingCycle:BILLING_CYCLE,includedInBase:true,resolved:true,questionRequired:false,owner:"mine",naverExtra:true},
-      "naver-extra-20261112-9900":{cardId:"naver",recordType:"transaction",status:"approved",date:"11.12",merchant:"쿠팡페이 결제 (내용 확인 필요)",amount:9900,billingCycle:BILLING_CYCLE,includedInBase:true,resolved:false,questionRequired:true,questionType:"detail",owner:"mine",ownerResolved:true,naverExtra:true},
       "samsung-202611-installment":{cardId:"samsung",date:"11월",merchant:"테슬라 오토카드할부",amount:764987,billingCycle:BILLING_CYCLE,includedInBase:true},
       "kbank-202610-transit":{cardId:"kbank",date:"10월",merchant:"후불교통(10월 이용분)",amount:34000,includedInBase:true},
       "kbank-20261116-refund":{cardId:"kbank",date:"11.16",merchant:"K-패스 환급(10월 이용분)",amount:-10940,includedInBase:true,credit:true}
@@ -233,30 +229,6 @@
     ];
 
     function normalizeText(value,maxLength){ return String(value==null?"":value).trim().slice(0,maxLength||2000); }
-    function hex(bytes){ return Array.from(new Uint8Array(bytes)).map(function(value){return value.toString(16).padStart(2,"0");}).join(""); }
-    function base64(bytes){ return btoa(String.fromCharCode.apply(null,new Uint8Array(bytes))); }
-    function profile(){ try{return JSON.parse(localStorage.getItem(DEVICE_PROFILE_NAME)||"null");}catch(error){return null;} }
-    async function createDeviceProfile(){
-      var keys=await crypto.subtle.generateKey({name:"ECDSA",namedCurve:"P-256"},true,["sign","verify"]);
-      var privateKey=await crypto.subtle.exportKey("pkcs8",keys.privateKey),publicKey=await crypto.subtle.exportKey("spki",keys.publicKey);
-      var data={deviceId:hex(await crypto.subtle.digest("SHA-256",publicKey)).slice(0,32),privateKey:base64(privateKey),publicKey:base64(publicKey)};
-      localStorage.setItem(DEVICE_PROFILE_NAME,JSON.stringify(data)); return data;
-    }
-    function refreshDeviceStatus(){
-      var data=profile(),request=data&&records.deviceRequests&&records.deviceRequests[data.deviceId],approval=data&&records.deviceApprovals&&records.deviceApprovals[data.deviceId],approved=!!(approval&&approval.approved===true);
-      document.getElementById("update-button").disabled=!approved; document.getElementById("device-register").hidden=approved;
-      document.getElementById("device-status").textContent=approved?"이 아이폰은 등록되었습니다. 입력이 있을 때만 맥의 Codex가 실행됩니다.":request?"등록 승인을 기다리는 중입니다. 이 채팅에서 등록 요청했다고 알려주세요.":"등록되지 않은 기기입니다. 최초 1회 등록 요청이 필요합니다.";
-    }
-    async function registerDevice(){
-      if(!firebaseReady||!firebaseApi){alert("실시간 연결 후 다시 시도해주세요.");return;}
-      var data=profile()||await createDeviceProfile(),now=Date.now(),request={publicKey:data.publicKey,status:"pending",createdAt:now,updatedAt:now};
-      try{await firebaseApi.set(firebaseApi.ref(firebaseApi.database,DB_PATH+"/deviceRequests/"+data.deviceId),request);records.deviceRequests[data.deviceId]=request;refreshDeviceStatus();}catch(error){alert("등록 요청을 저장하지 못했습니다.");}
-    }
-    async function signedRequest(data,text,createdAt){
-      var raw=Uint8Array.from(atob(data.privateKey),function(char){return char.charCodeAt(0);});
-      var key=await crypto.subtle.importKey("pkcs8",raw,{name:"ECDSA",namedCurve:"P-256"},false,["sign"]);
-      return base64(await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},key,new TextEncoder().encode(createdAt+"\n"+text)));
-    }
     function won(value){ return Math.abs(Number(value)||0).toLocaleString("ko-KR")+"원"; }
     function make(tag,className,text){ var node=document.createElement(tag); if(className) node.className=className; if(text!==undefined) node.textContent=text; return node; }
     function effectiveTransactions(){ return Object.assign({},DEFAULT_TRANSACTIONS,records.transactions||{}); }
@@ -290,12 +262,20 @@
       return total;
     }
     function unresolved(){ return Object.entries(effectiveTransactions()).filter(function(entry){ return entry[1].questionRequired&&!entry[1].resolved; }); }
+    function latestContentUpdateAt(){
+      var latest=LAST_STATIC_UPDATE_AT;
+      Object.values(records.transactions||{}).forEach(function(item){ latest=Math.max(latest,Number(item.updatedAt)||Number(item.createdAt)||0); });
+      Object.values(records.updates||{}).forEach(function(item){ if(item.status==="processed") latest=Math.max(latest,Number(item.processedAt)||Number(item.updatedAt)||0); });
+      return latest;
+    }
 
     function renderHeader(){
       var box=document.getElementById("sync-status");
       var labels={connecting:"연결 중",online:"실시간 동기화 중",offline:"오프라인 모드",error:"동기화 오류"};
       box.dataset.state=syncState; box.querySelector("span").textContent=labels[syncState];
       document.getElementById("offline-note").classList.toggle("show",syncState==="offline"||syncState==="error");
+      var updated=new Date(latestContentUpdateAt());
+      document.getElementById("as-of").textContent="11.24 기준 · "+String(updated.getHours()).padStart(2,"0")+":"+String(updated.getMinutes()).padStart(2,"0")+" 기준";
     }
     function summaryCard(label,value,note,className){
       var box=make("article","summary-card "+(className||""));
@@ -440,17 +420,13 @@
       await persistTransaction(key,updated,previous);
     }
     async function saveUpdate(){
-      var area=document.getElementById("update-text"),device=profile(); var text=normalizeText(area.value,2000); if(!text){alert("정보를 입력해주세요.");return;}
-      if(!device){alert("등록되지 않은 기기입니다.");return;}
-      var createdAt=Date.now(),signature=await signedRequest(device,text,createdAt);
-      var data={text:text,deviceId:device.deviceId,signature:signature,createdAt:createdAt,updatedAt:createdAt,status:"pending"};
+      var area=document.getElementById("update-text"),text=normalizeText(area.value,2000); if(!text){alert("정보를 입력해주세요.");return;}
+      var createdAt=Date.now(),data={text:text,createdAt:createdAt,updatedAt:createdAt,status:"pending"};
       if(firebaseReady&&firebaseApi){try{var updateRef=firebaseApi.push(firebaseApi.ref(firebaseApi.database,DB_PATH+"/updates")); records.updates[updateRef.key]=data; area.value=""; renderAll(); await firebaseApi.set(updateRef,data);}catch(error){alert("저장하지 못했습니다. 연결 상태를 확인해주세요.");}}
       else {records.updates["local-"+Date.now()]=data;area.value="";alert("오프라인 임시 저장했습니다.");}
     }
-    document.getElementById("device-register").addEventListener("click",registerDevice);
     document.getElementById("update-button").addEventListener("click",saveUpdate);
     renderAll();
-    refreshDeviceStatus();
     (async function(){
       try{
         var appModule=await import("https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js");
@@ -459,9 +435,9 @@
         firebaseApi={database:database,ref:dbModule.ref,push:dbModule.push,set:dbModule.set,update:dbModule.update,remove:dbModule.remove};
         var dataRef=dbModule.ref(database,DB_PATH);
         dbModule.onValue(dataRef,function(snapshot){
-          records={transactions:{},updates:{},deviceRequests:{},deviceApprovals:{}};
-          if(snapshot.exists()){var value=snapshot.val()||{}; records.transactions=value.transactions||{}; records.updates=value.updates||{};records.deviceRequests=value.deviceRequests||{};records.deviceApprovals=value.deviceApprovals||{};}
-          firebaseReady=true; syncState="online"; renderAll(); refreshDeviceStatus();
+          records={transactions:{},updates:{}};
+          if(snapshot.exists()){var value=snapshot.val()||{}; records.transactions=value.transactions||{}; records.updates=value.updates||{};}
+          firebaseReady=true; syncState="online"; renderAll();
         },function(){firebaseReady=false;syncState="error";renderAll();});
       }catch(error){firebaseReady=false;syncState="offline";renderAll();}
     })();
