@@ -237,7 +237,7 @@
       localStorage.setItem(DEVICE_PROFILE_NAME,JSON.stringify(data)); return data;
     }
     function refreshDeviceStatus(){
-      var data=profile(),request=data&&records.deviceRequests&&records.deviceRequests[data.deviceId],approved=!!(request&&request.status==="approved");
+      var data=profile(),request=data&&records.deviceRequests&&records.deviceRequests[data.deviceId],approval=data&&records.deviceApprovals&&records.deviceApprovals[data.deviceId],approved=!!(approval&&approval.approved===true);
       document.getElementById("update-button").disabled=!approved; document.getElementById("device-register").hidden=approved;
       document.getElementById("device-status").textContent=approved?"이 아이폰은 등록되었습니다. 입력이 있을 때만 맥의 Codex가 실행됩니다.":request?"등록 승인을 기다리는 중입니다. 이 채팅에서 등록 요청했다고 알려주세요.":"등록되지 않은 기기입니다. 최초 1회 등록 요청이 필요합니다.";
     }
@@ -416,8 +416,8 @@
         firebaseApi={database:database,ref:dbModule.ref,push:dbModule.push,set:dbModule.set,update:dbModule.update,remove:dbModule.remove};
         var dataRef=dbModule.ref(database,DB_PATH);
         dbModule.onValue(dataRef,function(snapshot){
-          records={transactions:{},updates:{},deviceRequests:{}};
-          if(snapshot.exists()){var value=snapshot.val()||{}; records.transactions=value.transactions||{}; records.updates=value.updates||{};records.deviceRequests=value.deviceRequests||{};}
+          records={transactions:{},updates:{},deviceRequests:{},deviceApprovals:{}};
+          if(snapshot.exists()){var value=snapshot.val()||{}; records.transactions=value.transactions||{}; records.updates=value.updates||{};records.deviceRequests=value.deviceRequests||{};records.deviceApprovals=value.deviceApprovals||{};}
           firebaseReady=true; syncState="online"; renderAll(); refreshDeviceStatus();
         },function(){firebaseReady=false;syncState="error";renderAll();});
       }catch(error){firebaseReady=false;syncState="offline";renderAll();}
