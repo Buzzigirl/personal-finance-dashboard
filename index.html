@@ -54,7 +54,6 @@
     .logo img { width:100%; height:100%; display:block; object-fit:cover; border-radius:12px; }
     .logo.mm-mine { background:#e34d4d; color:#111; }
     .logo.mm-mom { background:#3778d3; color:#fff; }
-    .logo.living { background:#e7f8f1; color:#159b70; font-size:.72rem; font-weight:800; }
     .logo.mm-mine span,.logo.mm-mom span { font-size:.92rem; font-weight:800; letter-spacing:-.05em; }
     .card-name { min-width:0; }
     .card-name small,.card-name strong,.card-value small,.card-value strong { display:block; }
@@ -111,8 +110,7 @@
     .update-box summary small { display:block; margin-top:2px; color:var(--muted); font-size:.65rem; }
     .update-body { padding:0 11px 11px; border-top:1px solid var(--line); }
     .reference-box { padding:10px 12px; }
-    .reference-box p { margin:4px 0 0; color:var(--muted); font-size:.75rem; line-height:1.5; overflow-wrap:anywhere; }
-    .reference-box #latest-reference { color:var(--text); font-weight:700; }
+    .reference-box p { margin:4px 0 0; color:var(--text); font-size:.75rem; font-weight:700; line-height:1.5; overflow-wrap:anywhere; }
     .benefits .update-body { padding-top:8px; }
     .benefit-list { display:grid; gap:7px; }
     .benefit-card { overflow:hidden; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:var(--shadow); }
@@ -134,7 +132,8 @@
     .future h2 { margin:0; font-size:.91rem; }
     .future p { margin:2px 0 10px; color:var(--muted); font-size:.68rem; }
     .future-grid { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
-    .future-item { min-height:44px; display:flex; align-items:center; justify-content:space-between; padding:9px 10px; border-radius:10px; background:var(--soft); }
+    .future-item { min-height:44px; display:flex; align-items:center; justify-content:space-between; padding:9px 10px; border:0; border-radius:10px; background:var(--soft); color:var(--text); text-align:left; }
+    .future-item:hover { background:var(--blue-soft); }
     .future-item strong { font-size:.76rem; }
     .future-item span { color:var(--purple); font-size:.64rem; font-weight:700; }
     .month-controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:12px 0; }
@@ -155,13 +154,21 @@
       <section class="update-box reference-box" aria-label="최근정보">
         <h2>최근정보</h2>
         <p id="latest-reference" aria-live="polite">최근 반영 기록 확인 중</p>
-        <p id="latest-reference-detail" hidden></p>
       </section>
       <div class="section-head"><h2>카드</h2><span>누르면 상세내역 표시</span></div>
       <section id="card-list" class="card-list"></section>
       <section id="review-section">
         <div class="section-head"><h2>답변 필요</h2><span id="review-caption"></span></div>
         <div id="review-list"></div>
+      </section>
+      <section class="future" aria-label="추가정보">
+        <h2>추가정보</h2><p>항목을 누르면 아래 상세 영역으로 이동합니다.</p>
+        <div class="future-grid">
+          <button class="future-item" type="button" data-target="monthly-section"><strong>월별 정리</strong><span>사용 중</span></button>
+          <button class="future-item" type="button" data-target="loan-section"><strong>대출</strong><span>추후 구현</span></button>
+          <button class="future-item" type="button" data-target="asset-section"><strong>자산</strong><span>추후 구현</span></button>
+          <button class="future-item" type="button" data-target="stock-section"><strong>증권</strong><span>추후 구현</span></button>
+        </div>
       </section>
       <details class="update-box benefits">
         <summary><span><h2>카드 혜택</h2></span><span class="toggle" aria-hidden="true"></span></summary>
@@ -182,14 +189,9 @@
           </form>
         </div>
       </details>
-      <section class="future" aria-label="향후 기능">
-        <h2>향후 기능</h2><p>카드 관리가 안정화된 뒤 순차적으로 연결합니다.</p>
-        <div class="future-grid">
-          <div class="future-item"><strong>대출</strong><span>향후 추진</span></div>
-          <div class="future-item"><strong>자산</strong><span>향후 추진</span></div>
-          <div class="future-item"><strong>증권</strong><span>향후 추진</span></div>
-        </div>
-      </section>
+      <details class="update-box" id="loan-section"><summary><span><h2>대출</h2><small>추후 구현</small></span><span class="toggle" aria-hidden="true"></span></summary></details>
+      <details class="update-box" id="asset-section"><summary><span><h2>자산</h2><small>추후 구현</small></span><span class="toggle" aria-hidden="true"></span></summary></details>
+      <details class="update-box" id="stock-section"><summary><span><h2>증권</h2><small>추후 구현</small></span><span class="toggle" aria-hidden="true"></span></summary></details>
     </main>
   </div>
   <script>
@@ -211,7 +213,6 @@
     const SEOUL_WEEKDAY = new Intl.DateTimeFormat("ko-KR",{timeZone:"Asia/Seoul",weekday:"short"});
     const WELFARE_POINTS = {2026:{granted:395060,used:395060},2027:{expected:"1분기"}};
     const LIVING_EXPENSE = {budget:800000,openingUsed:534122,entries:[]};
-    const RECEIVED_AT = {"59a59cc16e334f853fe35a1fb850170e06fc98cc2af5f738cb1b47232960bb6f":1795481160000};
     // Previously supplied November MM statement rows absent from the stored itemized ledger.
     const MM_STATEMENT_SPEND_NOT_ITEMIZED = {"2026-11":421400};
     let activeCycle = BILLING_CYCLE;
@@ -228,7 +229,8 @@
       shinhan:"https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/94/26/68/9426681f-caa0-0f24-0271-15b57dea1e25/AppIcon-0-0-1x_U007emarketing-0-6-0-85-220.png/128x128bb.jpg",
       naver:"https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/0b/e5/8b/0be58b7f-f75f-5b73-03a4-4768fd89c3cb/AppIcon-0-0-1x_U007epad-0-1-0-sRGB-0-85-220.png/128x128bb.jpg",
       samsung:"https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/42/17/ed/4217ed82-8dfe-4b51-b9d8-43dcc7734411/AppIcon-0-0-1x_U007emarketing-0-8-0-85-220.png/128x128bb.jpg",
-      kbank:"https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/54/60/58/546058b0-7611-05ca-791b-04bfff2b6597/AppIcon-0-0-1x_U007ephone-0-1-85-220.png/128x128bb.jpg"
+      kbank:"https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/54/60/58/546058b0-7611-05ca-791b-04bfff2b6597/AppIcon-0-0-1x_U007ephone-0-1-85-220.png/128x128bb.jpg",
+      living:"https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/07/90/ce/0790cea0-274a-332b-7ec2-1d0595de00d6/AppIcon-0-0-1x_U007ephone-0-1-0-85-220.png/128x128bb.jpg"
     };
     const CARDS = [
       {id:"shinhan",company:"신한카드",name:"국방전자 Lady카드",amount:103900,icon:"shinhan",performance:{current:103900,target:170000,label:"관리 목표"}},
@@ -247,7 +249,7 @@
       "shinhan-20261123-22000":{cardId:"shinhan",date:"11.23",merchant:"교촌치킨(식사)",amount:22000,billingCycle:BILLING_CYCLE,includedInBase:true},
       "shinhan-20261122-33900":{cardId:"shinhan",date:"11.22",merchant:"KTX(서울역-구포역)",amount:33900,billingCycle:BILLING_CYCLE,includedInBase:true},
       "shinhan-20261121-48000":{cardId:"shinhan",date:"11.21",merchant:"스팀게임(에이스컴뱃8)",amount:48000,billingCycle:BILLING_CYCLE,includedInBase:true},
-      "hyundai-mine-20261123-15500":{cardId:"hyundai_mom",recordType:"transaction",status:"approved",date:"11.23",merchant:"네이버페이(구매내용 확인 필요)",amount:15500,billingCycle:BILLING_CYCLE,includedInBase:false,questionRequired:true,resolved:false,owner:"mom",ownerResolved:false},
+      "hyundai-mine-20261123-15500":{cardId:"hyundai_mine",recordType:"transaction",status:"approved",date:"11.23",merchant:"네이버페이",detail:"탄산치약(일본)",amount:15500,billingCycle:BILLING_CYCLE,includedInBase:false,questionRequired:false,resolved:true,owner:"mine",ownerResolved:true},
       "hyundai-mine-20261117-183000":{cardId:"hyundai_mine",date:"11.17",merchant:"삼대도매횟집(식사)",amount:183000,billingCycle:BILLING_CYCLE,includedInBase:true},
       "hyundai-mine-20261112-90000":{cardId:"hyundai_mine",date:"11.12",merchant:"음주측정기 구매",amount:90000,billingCycle:BILLING_CYCLE,includedInBase:true},
       "hyundai-mom-20261122-17510":{cardId:"hyundai_mom",date:"11.22",merchant:"KCP-쿠팡페이(온라인 구매)",amount:17510,billingCycle:BILLING_CYCLE,includedInBase:true},
@@ -414,8 +416,8 @@
       var count=unresolved().length;
       host.append(summaryCard(billingLabel(activeCycle)+" 전체 카드값",signedWon(mine+mom),"수집 기준 잠정 집계 · 확정액은 월별 기록","total"));
       host.append(summaryCard("내 카드",signedWon(mine),"신한 · 네이버 · 현대 MM · 삼성",""));
-      host.append(summaryCard("생활비",signedWon(living),"잔액: "+signedWon(LIVING_EXPENSE.budget-living)+" · 80만원 기준",""));
-      host.append(summaryCard("내 용돈 지출",signedWon(pocket),"잔액: "+signedWon(400000-pocket),"pocket"));
+      host.append(summaryCard("생활비 잔액",signedWon(LIVING_EXPENSE.budget-living),"사용: "+signedWon(living)+" · 80만원 기준",""));
+      host.append(summaryCard("내 용돈 잔액",signedWon(400000-pocket),"사용: "+signedWon(pocket)+" · 40만원 기준","pocket"));
       var answer=make("button","summary-card answer"+(count?"":" clear")); answer.type="button";
       answer.append(make("span","summary-label","답변 필요"),make("strong","summary-value",count+"건"),make("small","summary-note",count?"확인하기":"확인 완료"));
       answer.addEventListener("click",function(){document.getElementById("review-section").scrollIntoView({behavior:"smooth",block:"start"});});
@@ -424,7 +426,6 @@
     function logoFor(card){
       var logo=make("span","logo "+(card.icon.indexOf("mm-")===0?card.icon:""));
       if(card.icon.indexOf("mm-")===0) logo.append(make("span","","MM"));
-      else if(card.icon==="living"){logo.classList.add("living");logo.append(make("span","","생활비"));}
       else { var image=document.createElement("img"); image.src=ICONS[card.icon]; image.alt=card.company; logo.append(image); }
       return logo;
     }
@@ -552,34 +553,21 @@
     }
     function latestReference(data){
       var latest=null;
-      function consider(at,label,card,amount,detail=""){
+      function consider(at,card,amount,content){
         if(!Number.isFinite(at)||at<=0||at>8640000000000000||(latest&&at<=latest.at)) return;
-        latest={at:at,text:[label,card,Number.isFinite(amount)?signedWon(amount):""].filter(Boolean).join(" "),detail:detail};
+        latest={at:at,card:card,amount:amount,content:content};
       }
-      function transactionDetail(tx){
-        if(!tx) return "수신 문자를 저장했습니다. 거래 정보는 확인 대기 중입니다.";
-        var desc=[normalizeText(tx.merchant,70)];
-        if(tx.detail&&tx.detail!==tx.merchant) desc.push(normalizeText(tx.detail,70));
-        if(/^\d{2}\.\d{2}$/.test(tx.date||"")) desc.push("거래일 "+tx.date+".");
-        if(itemCycle(tx)) desc.push(billingLabel(itemCycle(tx))+" 결제분");
-        if(tx.recordType==="transaction"&&tx.affectsBill===false) desc.push("청구 합계 제외");
-        else if(tx.status==="approved") desc.push("승인");
-        else if(tx.status==="cancelled") desc.push("취소");
-        return desc.filter(Boolean).join(" · ");
-      }
-      for(var [key,tx] of Object.entries(data.transactions||{})){
+      for(var tx of Object.values(data.transactions||{})){
         if(tx.recordType&&tx.recordType!=="transaction") continue;
         if(tx.affectsBill===false||/중간납[부입]/.test((tx.detail||"")+" "+(tx.merchant||""))) continue;
         var card=CARDS.find(card=>card.id===tx.cardId);
-        consider(RECEIVED_AT[key]||tx.receivedAt||tx.createdAt,"문자 반영",card?.name||card?.company,tx.amount,transactionDetail(tx));
+        consider(tx.receivedAt||tx.createdAt,card?.name||card?.company,tx.amount,expenseMemo(tx.detail||tx.merchant)||"내용 확인 필요");
       }
       return latest;
     }
     function renderReference(){
-      var event=latestReference(records), line=document.getElementById("latest-reference"),detail=document.getElementById("latest-reference-detail");
-      line.textContent=event?syncStamp(event.at)+" "+event.text:firebaseReady?"최근 반영 기록 없음":"최근 반영 기록 확인 중";
-      detail.textContent=event?.detail||"";
-      detail.hidden=!detail.textContent;
+      var event=latestReference(records), line=document.getElementById("latest-reference");
+      line.textContent=event?[syncStamp(event.at),event.card,Number.isFinite(event.amount)?signedWon(event.amount):"",event.content].filter(Boolean).join(" · "):firebaseReady?"수신시각이 확인된 카드 문자 없음":"최근 반영 기록 확인 중";
     }
     function benefitProgress(amount,target,prefix=""){
       var progress=make("div","benefit-progress"), bar=make("div"), fill=make("i");
@@ -718,6 +706,16 @@
     document.getElementById("billing-month").addEventListener("change",renderMonthlyHistory);
     document.getElementById("statement-card").replaceChildren(...CARDS.filter(card=>!card.excludeFromBill).map(card=>new Option(card.name,card.id)));
     document.getElementById("statement-form").addEventListener("submit",saveStatement);
+    document.querySelectorAll(".future-item[data-target]").forEach(function(button){
+      button.addEventListener("click",function(){
+        var target=document.getElementById(button.dataset.target); if(!target) return;
+        target.open=true; target.scrollIntoView({behavior:"smooth",block:"start"});
+      });
+    });
+    document.addEventListener("toggle",function(event){
+      var current=event.target; if(!(current instanceof HTMLDetailsElement)||!current.open) return;
+      document.querySelectorAll("details[open]").forEach(function(details){if(details!==current&&!details.contains(current)) details.open=false;});
+    },true);
     document.addEventListener("visibilitychange",function(){if(!document.hidden) renderAll();});
     function refreshAtSeoulMidnight(){
       var midnight=Date.parse(SEOUL_DATE.format(new Date())+"T00:00:00+09:00");
