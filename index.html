@@ -54,6 +54,7 @@
     .logo img { width:100%; height:100%; display:block; object-fit:cover; border-radius:12px; }
     .logo.mm-mine { background:#e34d4d; color:#111; }
     .logo.mm-mom { background:#3778d3; color:#fff; }
+    .logo.living { background:#e7f8f1; color:#159b70; font-size:.72rem; font-weight:800; }
     .logo.mm-mine span,.logo.mm-mom span { font-size:.92rem; font-weight:800; letter-spacing:-.05em; }
     .card-name { min-width:0; }
     .card-name small,.card-name strong,.card-value small,.card-value strong { display:block; }
@@ -209,6 +210,8 @@
     const SEOUL_TIME = new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Seoul",hour:"2-digit",minute:"2-digit",hourCycle:"h23"});
     const SEOUL_WEEKDAY = new Intl.DateTimeFormat("ko-KR",{timeZone:"Asia/Seoul",weekday:"short"});
     const WELFARE_POINTS = {2026:{granted:395060,used:395060},2027:{expected:"1분기"}};
+    const LIVING_EXPENSE = {budget:800000,openingUsed:534122,entries:[]};
+    const RECEIVED_AT = {"59a59cc16e334f853fe35a1fb850170e06fc98cc2af5f738cb1b47232960bb6f":1795481160000};
     // Previously supplied November MM statement rows absent from the stored itemized ledger.
     const MM_STATEMENT_SPEND_NOT_ITEMIZED = {"2026-11":421400};
     let activeCycle = BILLING_CYCLE;
@@ -233,7 +236,8 @@
       {id:"hyundai_mine",company:"현대카드",name:"MM · 내 카드",amount:273000,icon:"mm-mine",note:"10일 결제"},
       {id:"hyundai_mom",company:"현대카드",name:"MM · 엄마 카드",amount:1330416,icon:"mm-mom",note:"전액 정산"},
       {id:"samsung",company:"삼성카드",name:"테슬라 할부 카드",amount:764987,icon:"samsung",installment:{paid:8,total:60},note:"2026.4 시작 · 2031.3 종료"},
-      {id:"kbank",company:"케이뱅크",name:"ONE(K-패스) 체크",amount:0,icon:"kbank",note:"후불교통 · 월별 기록",excludeFromBill:true}
+      {id:"kbank",company:"케이뱅크",name:"ONE(K-패스) 체크",amount:0,icon:"kbank",note:"후불교통 · 월별 기록",excludeFromBill:true},
+      {id:"living",company:"수동 생활비 장부",name:"생활비카드",amount:LIVING_EXPENSE.openingUsed+LIVING_EXPENSE.entries.reduce((sum,item)=>sum+item.amount,0),icon:"living",note:"잔액 "+(LIVING_EXPENSE.budget-LIVING_EXPENSE.openingUsed-LIVING_EXPENSE.entries.reduce((sum,item)=>sum+item.amount,0)).toLocaleString("ko-KR")+"원 · 80만원 기준",excludeFromBill:true}
     ];
     const DEFAULT_TRANSACTIONS = {
       "history-202610-naver":{cardId:"naver",recordType:"statement",status:"confirmed",amount:471691,billingCycle:"2026-10-10"},
@@ -297,6 +301,7 @@
       return items;
     }
     function billingPeriod(cardId,cycle){
+      if(cardId==="living") return "월 800,000원 기준 · 중도입금·상쇄를 제외하고 지출만 누적";
       if(cardId==="kbank") return "후불교통 출금·환급 월 기준";
       if(cardId==="samsung") return "테슬라 할부 · 명세서 결제월 기준";
       var month=cycle.slice(0,7), cutoff=cardId==="shinhan"?26:28;
@@ -402,13 +407,14 @@
     }
     function renderSummary(){
       var host=document.getElementById("summary"); host.replaceChildren();
-      var mine=CARDS.filter(function(card){return card.id!=="hyundai_mom"&&card.id!=="kbank";}).reduce(function(sum,card){return sum+cardAmount(card);},0);
+      var mine=CARDS.filter(function(card){return !["hyundai_mom","kbank","living"].includes(card.id);}).reduce(function(sum,card){return sum+cardAmount(card);},0);
       var mom=cardAmount(CARDS.find(function(card){return card.id==="hyundai_mom";}));
-      var pocket=cardAmount(CARDS.find(function(card){return card.id==="hyundai_mine";}))+cardAmount(CARDS.find(function(card){return card.id==="shinhan";}));
+      var living=cardAmount(CARDS.find(function(card){return card.id==="living";}));
+      var pocket=cardAmount(CARDS.find(function(card){return card.id==="hyundai_mine";}))+cardAmount(CARDS.find(function(card){return card.id==="shinhan";}))+cardAmount(CARDS.find(function(card){return card.id==="kbank";}));
       var count=unresolved().length;
       host.append(summaryCard(billingLabel(activeCycle)+" 전체 카드값",signedWon(mine+mom),"수집 기준 잠정 집계 · 확정액은 월별 기록","total"));
       host.append(summaryCard("내 카드",signedWon(mine),"신한 · 네이버 · 현대 MM · 삼성",""));
-      host.append(summaryCard("엄마 카드",signedWon(mom),"현대 MM",""));
+      host.append(summaryCard("생활비",signedWon(living),"잔액: "+signedWon(LIVING_EXPENSE.budget-living)+" · 80만원 기준",""));
       host.append(summaryCard("내 용돈 지출",signedWon(pocket),"잔액: "+signedWon(400000-pocket),"pocket"));
       var answer=make("button","summary-card answer"+(count?"":" clear")); answer.type="button";
       answer.append(make("span","summary-label","답변 필요"),make("strong","summary-value",count+"건"),make("small","summary-note",count?"확인하기":"확인 완료"));
@@ -418,6 +424,7 @@
     function logoFor(card){
       var logo=make("span","logo "+(card.icon.indexOf("mm-")===0?card.icon:""));
       if(card.icon.indexOf("mm-")===0) logo.append(make("span","","MM"));
+      else if(card.icon==="living"){logo.classList.add("living");logo.append(make("span","","생활비"));}
       else { var image=document.createElement("img"); image.src=ICONS[card.icon]; image.alt=card.company; logo.append(image); }
       return logo;
     }
@@ -435,11 +442,19 @@
       if(card.id==="shinhan"&&!archive){
         Object.entries(WELFARE_POINTS).forEach(function(entry){
           var year=entry[0], data=entry[1], point=make("div","point");
+          if(Number(year)!==Number(SEOUL_DATE.format(new Date()).slice(0,4))) return;
           var known=Number.isFinite(data.granted), balance=known?Math.max(0,data.granted-(data.used||0)):0;
           point.append(make("span","",year+"년 복지포인트"),make("strong","",known?"잔액 "+won(balance):data.expected+" 지급 예정"),
             make("small","",known?"지급 "+won(data.granted)+" · 사용 "+won(data.used):"지급액 미확정"));
           wrap.append(point);
         });
+      }
+      if(card.id==="living"){
+        var livingList=make("ul","transactions");
+        livingList.append(makeLivingExpenseRow("현재","현재까지 사용 합계",LIVING_EXPENSE.openingUsed));
+        LIVING_EXPENSE.entries.forEach(function(entry){livingList.append(makeLivingExpenseRow(entry.date,entry.memo,entry.amount));});
+        wrap.append(livingList,make("p","detail-title","앞으로 알려주시는 날짜·금액·메모를 지출로 추가합니다. 차지비 주유는 테슬라 전기충전으로 정리합니다."));
+        return wrap;
       }
       if(card.id==="naver"){
         var checks=make("ul","checks");
@@ -483,6 +498,10 @@
       if(card.id==="kbank"&&items.length){ var burden=make("li"); var net=items.reduce((sum,item)=>sum+Number(item.amount||0),0); burden.append(make("time","","부담"),make("span","","환급 반영 교통비"),make("strong","",signedWon(net))); list.append(burden); }
       if(!items.length) wrap.append(make("p","detail-title","이 결제월에 저장된 내역이 없습니다."));
       wrap.append(list); return wrap;
+    }
+    function expenseMemo(value){return /차지비\s*주유/.test(value||"")?"테슬라 전기충전":normalizeText(value,120);}
+    function makeLivingExpenseRow(date,memo,amount){
+      var li=make("li"); li.append(make("time","",date||""),make("span","",expenseMemo(memo)||"생활비"),make("strong","",won(amount))); return li;
     }
     function renderList(){
       var host=document.getElementById("card-list"); var openIds=new Set(Array.from(host.querySelectorAll("details[open]")).map(function(node){return node.dataset.cardId;})); host.replaceChildren();
@@ -548,19 +567,11 @@
         else if(tx.status==="cancelled") desc.push("취소");
         return desc.filter(Boolean).join(" · ");
       }
-      for(var [key,message] of Object.entries(data.messages||{})){
-        var tx=data.transactions?.[key];
-        var company=CARDS.find(card=>card.id===tx?.cardId)?.company||{shinhan:"신한카드",hyundai:"현대카드",samsung:"삼성카드",kbank:"케이뱅크"}[message.source];
-        consider(message.createdAt,tx?"문자 반영":"문자 수집",company,tx?.amount,transactionDetail(tx));
-      }
-      for(var tx of Object.values(data.transactions||{})){
-        if(tx.affectsBill===false&&tx.recordType==="transaction"&&!tx.includedInBase&&!tx.affectsBenefit) continue;
+      for(var [key,tx] of Object.entries(data.transactions||{})){
+        if(tx.recordType&&tx.recordType!=="transaction") continue;
+        if(tx.affectsBill===false||/중간납[부입]/.test((tx.detail||"")+" "+(tx.merchant||""))) continue;
         var card=CARDS.find(card=>card.id===tx.cardId);
-        var label=tx.recordType==="statement"?"명세서 반영":/중간납[부입]/.test(tx.detail||"")?"중간납부 반영":tx.updatedAt?"거래 내역 갱신":"거래 내역 반영";
-        consider(tx.updatedAt||tx.createdAt,label,card?.company,tx.amount,transactionDetail(tx));
-      }
-      for(var update of Object.values(data.updates||{})){
-        if(update.status==="processed") consider(update.processedAt||update.updatedAt,"정보 반영 완료");
+        consider(RECEIVED_AT[key]||tx.receivedAt||tx.createdAt,"문자 반영",card?.name||card?.company,tx.amount,transactionDetail(tx));
       }
       return latest;
     }
