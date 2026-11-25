@@ -110,7 +110,8 @@
     .update-box summary small { display:block; margin-top:2px; color:var(--muted); font-size:.65rem; }
     .update-body { padding:0 11px 11px; border-top:1px solid var(--line); }
     .reference-box { padding:10px 12px; }
-    .reference-box p { margin:4px 0 0; color:var(--muted); font-size:.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .reference-box p { margin:4px 0 0; color:var(--muted); font-size:.75rem; line-height:1.5; overflow-wrap:anywhere; }
+    .reference-box #latest-reference { color:var(--text); font-weight:700; }
     .benefits .update-body { padding-top:8px; }
     .benefit-list { display:grid; gap:7px; }
     .benefit-card { overflow:hidden; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:var(--shadow); }
@@ -118,7 +119,7 @@
     .benefit-title strong,.benefit-title small { display:block; }
     .benefit-title strong { font-size:.78rem; }
     .benefit-title small { margin-top:2px; color:var(--muted); font-size:.64rem; }
-    .benefit-status { color:var(--green); font-size:.66rem; font-weight:700; white-space:nowrap; }
+    .benefit-status { padding:3px 7px; border-radius:6px; background:var(--soft); color:var(--muted); font-size:.66rem; font-weight:700; white-space:nowrap; }
     .benefit-body { padding:1px 11px 10px; border-top:1px solid var(--line); background:var(--soft); }
     .benefit-body ul { margin:0; padding:4px 0 3px 17px; }
     .benefit-body li { margin-top:6px; color:var(--text); font-size:.7rem; line-height:1.5; }
@@ -128,8 +129,6 @@
     .benefit-progress div { height:5px; overflow:hidden; border-radius:10px; background:#dfe7f0; }
     .benefit-progress i { display:block; width:100%; height:100%; border-radius:inherit; background:var(--green); }
     .benefit-progress small { display:block; margin-top:4px; color:var(--green); font-size:.66rem; font-weight:700; }
-    .mm-progress { padding:6px 11px 9px; border:1px solid var(--line); border-radius:12px; background:var(--surface); }
-    .mm-progress .benefit-progress { margin:0; }
     .future { margin-top:16px; padding:12px; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:var(--shadow); }
     .future h2 { margin:0; font-size:.91rem; }
     .future p { margin:2px 0 10px; color:var(--muted); font-size:.68rem; }
@@ -152,14 +151,16 @@
     <main>
       <div id="offline-note" class="offline">오프라인 모드입니다. 현재 입력한 내용은 다른 사용자와 공유되지 않으며 새로고침하면 사라질 수 있습니다.</div>
       <section id="summary" class="summary" aria-label="핵심 현황"></section>
+      <section class="update-box reference-box" aria-label="최근정보">
+        <h2>최근정보</h2>
+        <p id="latest-reference" aria-live="polite">최근 반영 기록 확인 중</p>
+        <p id="latest-reference-detail" hidden></p>
+      </section>
       <div class="section-head"><h2>카드</h2><span>누르면 상세내역 표시</span></div>
       <section id="card-list" class="card-list"></section>
       <section id="review-section">
         <div class="section-head"><h2>답변 필요</h2><span id="review-caption"></span></div>
         <div id="review-list"></div>
-      </section>
-      <section class="update-box reference-box" aria-label="참고정보">
-        <h2>참고정보</h2><p id="latest-reference" aria-live="polite">최근 반영 기록 확인 중</p>
       </section>
       <details class="update-box benefits">
         <summary><span><h2>카드 혜택</h2></span><span class="toggle" aria-hidden="true"></span></summary>
@@ -208,6 +209,8 @@
     const SEOUL_TIME = new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Seoul",hour:"2-digit",minute:"2-digit",hourCycle:"h23"});
     const SEOUL_WEEKDAY = new Intl.DateTimeFormat("ko-KR",{timeZone:"Asia/Seoul",weekday:"short"});
     const WELFARE_POINTS = {2026:{granted:395060,used:395060},2027:{expected:"1분기"}};
+    // Previously supplied November MM statement rows absent from the stored itemized ledger.
+    const MM_STATEMENT_SPEND_NOT_ITEMIZED = {"2026-11":421400};
     let activeCycle = BILLING_CYCLE;
     const NAVER_PREPAID_BENEFIT_SPEND = 21140;
     const NAVER_EXCLUDED_BENEFIT_SPEND = 11620;
@@ -357,7 +360,7 @@
         if(item.affectsBill===false&&item.affectsBenefit!==true) return total;
         if(/카드론|현금서비스|연회비|수수료|공과금|상하수도|상품권|선불.*충전/.test(item.merchant||"")) return total;
         return total+(Number(item.amount)||0);
-      },0));
+      },MM_STATEMENT_SPEND_NOT_ITEMIZED[month]||0));
     }
     function unresolved(){
       var transactions=Object.entries(effectiveTransactions()).filter(function(entry){ return entry[1].questionRequired&&!entry[1].resolved; });
@@ -493,12 +496,6 @@
         value.append(make("small","",note)); summary.append(logoFor(card),name,value,make("span","toggle"));
         var meter=meterFor(card); if(meter) summary.append(meter);
         details.append(summary,detailsFor(card)); host.append(details);
-        if(card.id==="hyundai_mom"){
-          var month=SEOUL_DATE.format(new Date()).slice(0,7), mm=mmBenefitSpend(month), strip=make("div","mm-progress");
-          var tier=mm>=1000000?"100만원 기준 충족 추정":mm>=500000?"50만원 기준 충족 추정":"50만원 기준 집계 중";
-          strip.append(benefitProgress(mm,mm>=500000?1000000:500000,Number(month.slice(5))+"월 MM 합산 · "+tier+" · "));
-          host.append(strip);
-        }
       });
     }
     function renderForm(){
@@ -536,19 +533,31 @@
     }
     function latestReference(data){
       var latest=null;
-      function consider(at,label,card,amount){
+      function consider(at,label,card,amount,detail=""){
         if(!Number.isFinite(at)||at<=0||at>8640000000000000||(latest&&at<=latest.at)) return;
-        latest={at:at,text:[label,card,Number.isFinite(amount)?signedWon(amount):""].filter(Boolean).join(" ")};
+        latest={at:at,text:[label,card,Number.isFinite(amount)?signedWon(amount):""].filter(Boolean).join(" "),detail:detail};
+      }
+      function transactionDetail(tx){
+        if(!tx) return "수신 문자를 저장했습니다. 거래 정보는 확인 대기 중입니다.";
+        var desc=[normalizeText(tx.merchant,70)];
+        if(tx.detail&&tx.detail!==tx.merchant) desc.push(normalizeText(tx.detail,70));
+        if(/^\d{2}\.\d{2}$/.test(tx.date||"")) desc.push("거래일 "+tx.date+".");
+        if(itemCycle(tx)) desc.push(billingLabel(itemCycle(tx))+" 결제분");
+        if(tx.recordType==="transaction"&&tx.affectsBill===false) desc.push("청구 합계 제외");
+        else if(tx.status==="approved") desc.push("승인");
+        else if(tx.status==="cancelled") desc.push("취소");
+        return desc.filter(Boolean).join(" · ");
       }
       for(var [key,message] of Object.entries(data.messages||{})){
         var tx=data.transactions?.[key];
         var company=CARDS.find(card=>card.id===tx?.cardId)?.company||{shinhan:"신한카드",hyundai:"현대카드",samsung:"삼성카드",kbank:"케이뱅크"}[message.source];
-        consider(message.createdAt,tx?"문자 반영":"문자 수집",company,tx?.amount);
+        consider(message.createdAt,tx?"문자 반영":"문자 수집",company,tx?.amount,transactionDetail(tx));
       }
       for(var tx of Object.values(data.transactions||{})){
         if(tx.affectsBill===false&&tx.recordType==="transaction"&&!tx.includedInBase&&!tx.affectsBenefit) continue;
         var card=CARDS.find(card=>card.id===tx.cardId);
-        consider(tx.updatedAt||tx.createdAt,tx.recordType==="statement"?"명세서 반영":tx.updatedAt?"거래 내역 갱신":"거래 내역 반영",card?.company,tx.amount);
+        var label=tx.recordType==="statement"?"명세서 반영":/중간납[부입]/.test(tx.detail||"")?"중간납부 반영":tx.updatedAt?"거래 내역 갱신":"거래 내역 반영";
+        consider(tx.updatedAt||tx.createdAt,label,card?.company,tx.amount,transactionDetail(tx));
       }
       for(var update of Object.values(data.updates||{})){
         if(update.status==="processed") consider(update.processedAt||update.updatedAt,"정보 반영 완료");
@@ -556,9 +565,10 @@
       return latest;
     }
     function renderReference(){
-      var event=latestReference(records), line=document.getElementById("latest-reference");
+      var event=latestReference(records), line=document.getElementById("latest-reference"),detail=document.getElementById("latest-reference-detail");
       line.textContent=event?syncStamp(event.at)+" "+event.text:firebaseReady?"최근 반영 기록 없음":"최근 반영 기록 확인 중";
-      line.title=line.textContent;
+      detail.textContent=event?.detail||"";
+      detail.hidden=!detail.textContent;
     }
     function benefitProgress(amount,target,prefix=""){
       var progress=make("div","benefit-progress"), bar=make("div"), fill=make("i");
@@ -579,18 +589,26 @@
     function renderBenefits(){
       var host=document.getElementById("benefit-list"); host.replaceChildren();
       var spend=naverBenefitSpend();
-      var naver=benefitCard("네이버 현대카드 Edition 1","전월 30만원 기준",spend>=300000?"추정 실적 충족":"집계 중",[
+      var naver=benefitCard("네이버 현대카드 Edition 1","전월 30만원 기준","포인트 적립",[
         "네이버플러스 멤버십 자동결제 시 멤버십 이용권 제공",
         "네이버플러스 멤버십 적립 대상은 월 20만원 이용액까지 5%, 그 외 국내외 결제는 1% 적립",
         "도시가스·전기·아파트관리비·세금·공과금은 실적과 적립에서 제외"
       ],"https://www.hyundaicard.com/upload/card/T_AEI-20260309-1644-88_%EA%B8%88%EC%86%8C%EB%B2%95_%EB%84%A4%EC%9D%B4%EB%B2%84%20%ED%98%84%EB%8C%80%EC%B9%B4%EB%93%9C%20Ed1_v1.pdf","달력월 사용액을 기준으로 계산한 추정치입니다. 승인 문자에 없는 실적 제외 건은 카드사 앱에서 확인하세요.");
-      naver.querySelector(".benefit-body").prepend(benefitProgress(spend,300000)); host.append(naver);
-      host.append(benefitCard("현대카드 MM","내 카드·엄마 카드 공통","전월 50만원",[
+      naver.querySelector(".benefit-body").prepend(benefitProgress(spend,300000,spend>=300000?"추정 실적 충족 · ":"집계 중 · ")); host.append(naver);
+      var mm=benefitCard("현대카드 MM","내 카드·엄마 카드 합산","포인트 적립",[
         "전월 50만원 이상이면 국내외 결제 1.5% M포인트 적립, 월 적립 한도 없음",
         "전월 100만원 이상이면 온라인몰·외식·해외 10% 적립, 세 영역 합산 월 2만 M포인트 한도",
         "10% 대상 온라인몰에 네이버쇼핑·쿠팡·G마켓·옥션·11번가·SSG·컬리 포함"
-      ],"https://www.hyundaicard.com/upload/card/20241017_%ED%98%84%EB%8C%80%EC%B9%B4%EB%93%9CMM%20%EA%B0%80%EC%9D%B4%EB%93%9C%EB%B6%81_V2.pdf","합산 표시는 저장된 달력월 거래 기준 추정치입니다. 공식 실적은 본인·가족 카드로 연결된 현대카드 MM 기준입니다."));
-      host.append(benefitCard("국방전자 Lady카드","신한카드 · 연회비 없음","아웃백 20%",[
+      ],"https://www.hyundaicard.com/upload/card/20241017_%ED%98%84%EB%8C%80%EC%B9%B4%EB%93%9CMM%20%EA%B0%80%EC%9D%B4%EB%93%9C%EB%B6%81_V2.pdf","실적 추정은 달력월 이용분 기준입니다. 카드사 확정 실적은 앱에서 확인할 수 있습니다.");
+      var month=SEOUL_DATE.format(new Date()).slice(0,7), mmSpend=mmBenefitSpend(month);
+      var tier=mmSpend>=1000000?"100만원 기준 충족 추정":mmSpend>=500000?"50만원 기준 충족 추정":"50만원 기준 집계 중";
+      var mmBill=CARDS.filter(card=>card.id==="hyundai_mine"||card.id==="hyundai_mom").reduce((sum,card)=>sum+cardAmount(card),0);
+      mm.querySelector(".benefit-body").prepend(
+        benefitProgress(mmSpend,mmSpend>=500000?1000000:500000,Number(month.slice(5))+"월 · "+tier+" · "),
+        make("p","",billingLabel(activeCycle)+" 결제 예정액 합계 "+signedWon(mmBill))
+      );
+      host.append(mm);
+      host.append(benefitCard("국방전자 Lady카드","신한카드 · 연회비 없음","결제 할인",[
         "아웃백 20% 현장할인 · 전월 30만원 이상 · 연 4회 · 건당 20만원 결제액까지 · 중복할인 제외",
         "복지포인트는 일시불에서 우선 사용하며 매년 11월 30일까지 사용 가능",
         "군 체력단련장·휴양시설 10% 할인, 기본 월 2만원 한도. 전월 70만원 이상이면 1만원 추가",
@@ -598,12 +616,12 @@
         "인터파크 영화 본인·동반 1인 각 1,500원 할인 · 전월 30만원 이상",
         "에버랜드·롯데월드·서울랜드 본인 50%, 캐리비안베이 본인 30% 할인 · 전월 30만원 이상"
       ],"https://www.shinhancard.com/pconts/html/card/apply/credit/1192496_2207.html","주유 적립은 제공 자료와 Lady 공식 안내가 달라 보유카드 앱 확인이 필요합니다."));
-      host.append(benefitCard("삼성 iD SELECT ALL","현재 테슬라 할부 전용","추가 사용 없음",[
+      host.append(benefitCard("삼성 iD SELECT ALL","현재 테슬라 할부 전용","결제 할인",[
         "아파트관리비·이동통신 또는 교육 10% 할인",
         "음식점·편의점·할인점·주유 7% 할인",
         "디지털콘텐츠·멤버십 50% 할인"
       ],"https://www.samsungcard.com/home/card/cardinfo/PGHPPCCCardCardinfoRecommend001","공개 상품 요약에서 확인된 항목만 표시했습니다. 전월실적과 월 한도는 삼성카드 앱의 보유카드 혜택을 기준으로 확인합니다."));
-      host.append(benefitCard("케이뱅크 ONE(K-패스)","후불교통 전용","10월 34,000원",[
+      host.append(benefitCard("케이뱅크 ONE(K-패스)","후불교통 전용","교통 환급",[
         "K-패스 환급은 적용 대상이면 후불교통 출금일에 연결계좌로 지급",
         "2026년 추가 교통 혜택은 전월 교통비 5만원 이상일 때 적용",
         "전월 카드 사용 30만원 이상이면 추가 교통 혜택이 최대 5,000원"
