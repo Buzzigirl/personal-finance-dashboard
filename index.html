@@ -259,11 +259,11 @@
       "kbank-20261116-refund":{cardId:"kbank",date:"11.16",merchant:"K-패스 환급(10월 이용분)",amount:-10940,recordType:"cashback",paymentDate:"2026-11-16",includedInBase:true,credit:true}
     };
     const FIXED_EXPENSES = [
-      {id:"gas",label:"관사 도시가스",amount:11620,day:"05~06",paid:"11.05",previousMonth:true,aliases:["부산도시가스"]},
+      {id:"gas",label:"관사 도시가스",amount:11620,day:"05~07",paid:"11.05",variableAmount:true,previousMonth:true,aliases:["부산도시가스"]},
       {id:"icloud",label:"애플 아이클라우드",amount:1100,day:"09",paid:"11.09",aliases:["apple","아이클라우드"]},
-      {id:"child-insurance",label:"최이현 어린이보험 (현대해상)",amount:75370,day:"10",paid:"11.10",aliases:["현대해상"]},
-      {id:"indemnity",label:"최영현 실손보험 (한화)",amount:139030,day:"11",paid:"11.11",aliases:["한화손해보험"]},
-      {id:"driver",label:"최영현 운전자보험 (한화)",amount:9941,day:"11",paid:"11.11",aliases:["한화손해보험"]},
+      {id:"child-insurance",label:"최이현 어린이보험 (현대해상)",amount:75370,day:"10~12",paid:"11.10",aliases:["현대해상"]},
+      {id:"indemnity",label:"최영현 실손보험 (한화)",amount:139030,day:"11~12",paid:"11.11",aliases:["한화손해보험"]},
+      {id:"driver",label:"최영현 운전자보험 (한화)",amount:9941,day:"11~12",paid:"11.11",aliases:["한화손해보험"]},
       {id:"talk-drawer",label:"카카오톡 톡서랍",amount:2500,day:"12",paid:"11.12",aliases:["apple","톡서랍"]},
       {id:"internet",label:"SKT 인터넷 요금",amount:16500,day:"14",paid:"11.14",aliases:["sk텔레콤유선서비스","인터넷"]},
       {id:"mobile",label:"SKT 휴대폰 요금",amount:54250,day:"14",paid:"11.14",aliases:["skt","휴대폰"]},
@@ -324,16 +324,21 @@
       return key(a).localeCompare(key(b),"ko");
     }
     function fixedPayment(row,month,cycle,items,used){
-      var live=items.find(function(item){
+      var days=row.day.split("~").map(Number);
+      function dayDistance(item){
+        var day=Number(item.date.slice(3));
+        return Math.max(days[0]-day,day-days[days.length-1],0);
+      }
+      var live=items.filter(function(item){
         if(used.has(item)||item.affectsBill===false||transactionMonth(item)!==month||item.status==="cancelled"||Number(item.amount)<=0) return false;
         var text=String((item.detail||"")+" "+(item.merchant||"")).toLowerCase();
         var aliasMatch=row.aliases.some(function(alias){return text.indexOf(alias.toLowerCase())>=0;});
-        var amountMatch=row.id==="gas"||Math.abs(Number(item.amount)||0)===row.amount;
+        var amountMatch=row.variableAmount||Number(item.amount)===row.amount;
         return aliasMatch&&amountMatch;
-      });
+      }).sort(function(a,b){return dayDistance(a)-dayDistance(b);})[0];
       if(live){used.add(live);return {checked:true,date:live.date,amount:live.amount};}
       if(cycle===BILLING_CYCLE&&row.paid) return {checked:true,date:row.paid,amount:row.amount};
-      return {checked:false,date:month.slice(5)+"."+row.day,amount:row.amount};
+      return {checked:false,date:month.slice(5)+"."+row.day,amount:row.variableAmount?null:row.amount};
     }
     function cardAmount(card,cycle=activeCycle){
       var scheduledInstallment=card.id==="samsung"&&cycle>=BILLING_CYCLE&&cycle<="2031-03-10";
@@ -477,10 +482,10 @@
           var month=usageMonth+"월 "+(row.previousMonth?"사용분":""),paymentDate=state.date;
           var li=make("li",checked?"":"pending-row"); var input=document.createElement("input"); input.type="checkbox"; input.checked=checked; input.disabled=true;
           var text=make("span"); text.append(document.createTextNode(row.label+" "),make("em","", "["+month.trim()+"]"));
-          var value=make("span","expense-value"); value.append(make("strong","",won(state.amount)),make("small","",checked?"결제일 "+paymentDate:"결제예상일 "+paymentDate+" 예상"));
+          var value=make("span","expense-value"); value.append(make("strong","",state.amount===null?"금액 미확정":won(state.amount)),make("small","",checked?"결제일 "+paymentDate:"결제예상일 "+paymentDate));
           li.append(input,text,value); checks.append(li);
         });
-        wrap.append(checks);
+        if(checks.childElementCount) wrap.append(make("h4","detail-title","고정지출금"),checks);
         var extras=items.filter(function(item){
           return !fixedItems.has(item)&&(item.affectsBill!==false||item.affectsBenefit===true);
         }).sort(sortTransactionDates);
