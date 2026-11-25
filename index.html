@@ -62,8 +62,7 @@
     .card-value { text-align:right; }
     .card-value strong { font-size:.78rem; white-space:nowrap; }
     .card-value small { max-width:132px; margin-top:2px; overflow:hidden; color:var(--muted); font-size:.62rem; text-overflow:ellipsis; white-space:nowrap; }
-    .installment-card summary { height:auto; min-height:74px; padding-bottom:13px; }
-    .installment-card .card-value small { max-width:112px; white-space:normal; line-height:1.35; overflow-wrap:anywhere; }
+    .installment-card .card-value small { max-width:none; overflow:visible; text-overflow:clip; }
     .toggle { width:20px; height:20px; display:grid; place-items:center; color:var(--muted); font-size:1rem; }
     .toggle::before { content:"＋"; }
     details[open] > summary .toggle::before { content:"−"; }
@@ -167,7 +166,7 @@
         <div class="update-body"><div id="benefit-list" class="benefit-list"></div></div>
       </details>
       <details class="update-box" id="monthly-section">
-        <summary><span><h2>월별 명세서</h2><small>월말·월중·다음 달 초 문자 집계와 대조</small></span><span class="toggle" aria-hidden="true"></span></summary>
+        <summary><span><h2>월별 명세서</h2></span><span class="toggle" aria-hidden="true"></span></summary>
         <div class="update-body">
           <div class="month-controls"><label for="billing-month">결제월</label><select id="billing-month"></select></div>
           <div id="monthly-history" class="card-list"></div>
@@ -230,7 +229,7 @@
       {id:"naver",company:"현대카드",name:"네이버카드 Edition 1",icon:"naver",performance:{target:300000}},
       {id:"hyundai_mine",company:"현대카드",name:"MM · 내 카드",amount:273000,icon:"mm-mine",note:"10일 결제"},
       {id:"hyundai_mom",company:"현대카드",name:"MM · 엄마 카드",amount:1330416,icon:"mm-mom",note:"전액 정산"},
-      {id:"samsung",company:"삼성카드",name:"테슬라 할부 카드",amount:764987,icon:"samsung",installment:{paid:8,total:60},note:"2026.4 시작 · 2031.3 종료"},
+      {id:"samsung",company:"삼성카드",name:"테슬라 할부 카드",amount:764987,icon:"samsung",installment:{paid:8,total:60},note:"2026.4~2031.3"},
       {id:"kbank",company:"케이뱅크",name:"ONE(K-패스) 체크",amount:0,icon:"kbank",note:"후불교통 · 월별 기록",excludeFromBill:true},
       {id:"living",company:"수동 생활비 장부",name:"생활비카드",amount:LIVING_EXPENSE.openingUsed+LIVING_EXPENSE.entries.reduce((sum,item)=>sum+item.amount,0),icon:"living",note:"잔액 "+(LIVING_EXPENSE.budget-LIVING_EXPENSE.openingUsed-LIVING_EXPENSE.entries.reduce((sum,item)=>sum+item.amount,0)).toLocaleString("ko-KR")+"원 · 80만원 기준",excludeFromBill:true}
     ];
@@ -522,7 +521,7 @@
         var summary=document.createElement("summary"); var name=make("span","card-name"); name.append(make("small","",card.company),make("strong","",card.name));
         var value=make("span","card-value"); value.append(make("strong","",signedWon(cardAmount(card))));
         var note=card.note||card.point||"";
-        if(card.id==="naver") note="반영된 결제 합계";
+        if(card.id==="naver") note="실적 "+naverBenefitSpend().toLocaleString("ko-KR")+" / "+won(card.performance.target);
         else if(card.performance) note=card.performance.label+" "+cardAmount(card).toLocaleString("ko-KR")+" / "+won(card.performance.target);
         if(card.installment) note=card.note+" · "+card.installment.paid+"/"+card.installment.total+"회";
         value.append(make("small","",note)); summary.append(logoFor(card),name,value,make("span","toggle"));
@@ -622,14 +621,21 @@
         make("p","",billingLabel(activeCycle)+" 결제 예정액 합계 "+signedWon(mmBill))
       );
       host.append(mm);
-      host.append(benefitCard("국방전자 Lady카드","신한카드 · 연회비 없음","결제 할인",[
+      var lady=benefitCard("국방전자 Lady카드","신한카드 · 전월 30만원 기준","결제 할인",[
         "아웃백 20% 현장할인 · 전월 30만원 이상 · 연 4회 · 건당 20만원 결제액까지 · 중복할인 제외",
         "복지포인트는 일시불에서 우선 사용하며 매년 11월 30일까지 사용 가능",
         "군 체력단련장·휴양시설 10% 할인, 기본 월 2만원 한도. 전월 70만원 이상이면 1만원 추가",
         "iMND 포인트는 복지포인트 사용액 0.25%, 소진 후 일반 결제액 0.125% 적립",
         "인터파크 영화 본인·동반 1인 각 1,500원 할인 · 전월 30만원 이상",
         "에버랜드·롯데월드·서울랜드 본인 50%, 캐리비안베이 본인 30% 할인 · 전월 30만원 이상"
-      ],"https://www.shinhancard.com/pconts/html/card/apply/credit/1192496_2207.html","주유 적립은 제공 자료와 Lady 공식 안내가 달라 보유카드 앱 확인이 필요합니다."));
+      ],"https://www.shinhancard.com/pconts/html/card/apply/credit/1192496_2207.html","달력월에 반영된 이용내역 기준입니다. 확정 실적과 주유 적립은 신한카드 앱에서 확인할 수 있습니다.");
+      var ladySpend=Object.values(effectiveTransactions()).reduce(function(total,item){
+        if(item.cardId!=="shinhan"||transactionMonth(item)!==month) return total;
+        if((item.recordType&&item.recordType!=="transaction")||!affectsCardTotal(item)||item.affectsBenefit===false) return total;
+        return total+(Number(item.amount)||0);
+      },0);
+      lady.querySelector(".benefit-body").prepend(benefitProgress(Math.max(0,ladySpend),300000,Number(month.slice(5))+"월 집계 · "));
+      host.append(lady);
       host.append(benefitCard("삼성 iD SELECT ALL","현재 테슬라 할부 전용","결제 할인",[
         "아파트관리비·이동통신 또는 교육 10% 할인",
         "음식점·편의점·할인점·주유 7% 할인",
