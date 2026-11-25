@@ -232,7 +232,6 @@
     let firebaseReady = false;
     let firebaseApi = null;
     let syncState = "connecting";
-    let lastDataChangeAt = 0;
 
     const ICONS = {
       shinhan:"https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/94/26/68/9426681f-caa0-0f24-0271-15b57dea1e25/AppIcon-0-0-1x_U007emarketing-0-6-0-85-220.png/128x128bb.jpg",
@@ -294,12 +293,19 @@
     function normalizeText(value,maxLength){ return String(value==null?"":value).trim().slice(0,maxLength||2000); }
     function won(value){ return Math.abs(Number(value)||0).toLocaleString("ko-KR")+"원"; }
     function make(tag,className,text){ var node=document.createElement(tag); if(className) node.className=className; if(text!==undefined) node.textContent=text; return node; }
+    const SMS_REVIEW_START = Date.parse("2026-11-25T00:00:00+09:00");
+    function isSmsRecord(key,item){
+      return /^[a-f0-9]{64}$/.test(key)&&item.fingerprint===key;
+    }
+    function usesSmsReview(key,item){
+      return item.smsReviewPolicy===1||(item.createdAt>=SMS_REVIEW_START&&isSmsRecord(key,item));
+    }
     function reconcileTransactions(input){
       var visible=Object.assign({},input), unmatched=[];
       function matchKey(item){
         var card=item.cardId;
         if(card==="hyundai_mine"||card==="hyundai_mom") card="hyundai_mm";
-        var merchant=normalizeText(item.merchant,120).toLowerCase().replace(/\s+/g,"");
+        var merchant=normalizeText(item.merchant,120).normalize("NFC").toLowerCase().replace(/\s+/g,"");
         if(!card||!merchant||!item.date||!item.billingCycle||!Math.abs(Number(item.amount))) return null;
         return JSON.stringify([card,item.billingCycle,item.date,merchant,Math.abs(Number(item.amount))]);
       }
@@ -307,7 +313,7 @@
       for(var entry of Object.entries(input)){
         var item=entry[1];
         if(item.recordType!=="transaction") continue;
-        var cancelled=item.status==="cancelled"&&item.smsReviewPolicy===1;
+        var cancelled=item.status==="cancelled"&&usesSmsReview(entry[0],item);
         if(cancelled) delete visible[entry[0]];
         if(!cancelled&&(item.status!=="approved"||Number(item.amount)<=0||item.includedInBase===true||!affectsCardTotal(item))) continue;
         var key=matchKey(item);
@@ -436,43 +442,32 @@
         return total+(Number(item.amount)||0);
       },MM_STATEMENT_SPEND_NOT_ITEMIZED[month]||0));
     }
-    function needsDetailReview(item){
-      if(item.smsReviewPolicy!==1||item.recordType!=="transaction"||item.status!=="approved"||item.detail||!affectsCardTotal(item)) return false;
+    function needsDetailReview(key,item){
+      if(!usesSmsReview(key,item)||item.recordType!=="transaction"||item.status!=="approved"||item.detail||!affectsCardTotal(item)) return false;
       if(item.cardId==="naver") return !naverExpenseLabel(item);
       return ["shinhan","hyundai_mine","samsung"].includes(item.cardId);
     }
     function unresolved(){
       var view=transactionView();
-      var transactions=Object.entries(view.visible).filter(function(entry){ return (entry[1].questionRequired&&!entry[1].resolved)||needsDetailReview(entry[1]); });
+      var transactions=Object.entries(view.visible).filter(function([key,item]){ return (item.questionRequired&&!item.resolved)||needsDetailReview(key,item); });
       transactions.push(...view.unmatched.map(([key,item])=>[key,Object.assign({recordKind:"cancel-review"},item)]));
       var messages=Object.entries(records.messages||{}).filter(function(entry){return entry[1].status==="needs_info";}).map(function(entry){
         return ["message:"+entry[0],Object.assign({recordKind:"message"},entry[1])];
       });
       return transactions.concat(messages);
     }
-    function latestDataChange(data){
-      var latest=0;
-      for(var collection of [data.transactions,data.updates,data.messages]){
-        for(var item of Object.values(collection||{})){
-          for(var value of [item?.createdAt,item?.updatedAt,item?.processedAt]){
-            if(Number.isFinite(value)&&value>0&&value<=8640000000000000) latest=Math.max(latest,value);
-          }
-        }
-      }
-      return latest;
-    }
     function syncStamp(timestamp){
       var date=new Date(timestamp);
       return SEOUL_DATE.format(date).slice(5).replace("-",".")+".("+SEOUL_WEEKDAY.format(date)+") "+SEOUL_TIME.format(date);
     }
-    function renderHeader(){
+    function renderHeader(event){
       document.title=billingLabel(activeCycle)+" 결제 예정";
       document.querySelector(".header h1").textContent=document.title;
       var box=document.getElementById("sync-status");
-      var stamp=lastDataChangeAt?syncStamp(lastDataChangeAt):"";
+      var stamp=event?syncStamp(event.at):"";
       var labels={connecting:"연결 중",online:"동기화",offline:"오프라인",error:"동기화 오류"};
       box.dataset.state=syncState;
-      box.querySelector("span").textContent=stamp?stamp+" "+labels[syncState]:syncState==="online"?"변경 기록 없음":labels[syncState];
+      box.querySelector("span").textContent=stamp?stamp+" "+labels[syncState]:labels[syncState];
       document.getElementById("offline-note").classList.toggle("show",syncState==="offline"||syncState==="error");
     }
     function summaryCard(label,value,note,className){
@@ -613,7 +608,7 @@
           box.append(make("p","review-question","취소 문자 · 원승인을 하나로 확정할 수 없어 확인이 필요합니다."));
           host.append(box); return;
         }
-        if(item.questionType==="detail"||(item.ownerResolved&&item.owner==="mine")||needsDetailReview(item)){
+        if(item.questionType==="detail"||(item.ownerResolved&&item.owner==="mine")||needsDetailReview(key,item)){
           box.append(make("p","review-question","무엇에 쓴 금액인가요?"));
           var area=document.createElement("textarea"); area.rows=2; area.maxLength=120; area.placeholder="예: 생활용품 구매";
           area.addEventListener("blur",function(){area.value=standardDetail(area.value,item);});
@@ -637,20 +632,21 @@
         if(!Number.isFinite(at)||at<=0||at>8640000000000000||(latest&&at<=latest.at)) return;
         latest={at:at,card:card,amount:amount,content:content};
       }
-      for(var tx of Object.values(reconcileTransactions(records.transactions||{}).visible)){
+      for(var [key,tx] of Object.entries(reconcileTransactions(records.transactions||{}).visible)){
         var card=RECENT_CARD_NAMES[tx.cardId];
-        if(!card||!Number.isFinite(tx.amount)) continue;
+        if(!card||!Number.isFinite(tx.amount)||(!tx.receivedAt&&!isSmsRecord(key,tx))) continue;
         var transitDebit=tx.cardId==="kbank"&&tx.recordType==="scheduled_debit";
-        if(!transitDebit&&((tx.recordType&&tx.recordType!=="transaction")||!affectsCardTotal(tx))) continue;
+        if(!transitDebit&&((tx.recordType&&tx.recordType!=="transaction")||tx.status==="cancelled"||!affectsCardTotal(tx))) continue;
         var content=expenseMemo(tx.detail);
         if(!content&&tx.cardId==="naver") content=naverExpenseLabel(tx);
-        consider(tx.receivedAt,card,tx.amount,content||expenseMemo(tx.merchant)||"내용 확인 필요");
+        var at=[tx.updatedAt,tx.createdAt,tx.receivedAt].find(value=>Number.isFinite(value)&&value>0&&value<=8640000000000000);
+        consider(at,card,tx.amount,content||(needsDetailReview(key,tx)?"내용 확인 필요":expenseMemo(tx.merchant))||"내용 확인 필요");
       }
       return latest;
     }
-    function renderReference(){
-      var event=latestReference(), line=document.getElementById("latest-reference");
-      line.textContent=event?[syncStamp(event.at),event.card,Number.isFinite(event.amount)?signedWon(event.amount):"",event.content].filter(Boolean).join(" · "):firebaseReady?"수신시각이 확인된 카드 문자 없음":"최근 반영 기록 확인 중";
+    function renderReference(event){
+      var line=document.getElementById("latest-reference");
+      line.textContent=event?[syncStamp(event.at),event.card,Number.isFinite(event.amount)?signedWon(event.amount):"",event.content].filter(Boolean).join(" · "):firebaseReady?"최근 반영된 카드 거래 없음":"최근 반영 기록 확인 중";
     }
     function benefitProgress(amount,target,prefix=""){
       var progress=make("div","benefit-progress"), bar=make("div"), fill=make("i");
@@ -763,7 +759,8 @@
     }
     function renderAll(){
       activeCycle=currentBillingCycle(SEOUL_DATE.format(new Date()));
-      renderHeader(); renderForm(); renderList(); renderSummary(); renderReference(); renderBenefits(); renderMonthlyHistory();
+      var event=latestReference();
+      renderHeader(event); renderForm(); renderList(); renderSummary(); renderReference(event); renderBenefits(); renderMonthlyHistory();
     }
     async function persistTransaction(key,updated,previous){
       records.transactions[key]=updated; renderAll();
@@ -824,7 +821,7 @@
         dbModule.onValue(dataRef,function(snapshot){
           records={transactions:{},updates:{},messages:{}};
           if(snapshot.exists()){var value=snapshot.val()||{}; records.transactions=value.transactions||{}; records.updates=value.updates||{}; records.messages=value.messages||{};}
-          firebaseReady=true; syncState="online"; lastDataChangeAt=latestDataChange(records); renderAll();
+          firebaseReady=true; syncState="online"; renderAll();
         },function(){firebaseReady=false;syncState="error";renderAll();});
       }catch(error){firebaseReady=false;syncState="offline";renderAll();}
     })();
