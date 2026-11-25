@@ -642,9 +642,10 @@
         var historical=cycle<BILLING_CYCLE;
         var details=make("details","finance-card"),summary=document.createElement("summary");
         var name=make("span","card-name"),value=make("span","card-value"), delta=statement?Number(statement.amount)-amount:null;
-        name.append(make("strong","",card.name),make("small","",card.excludeFromBill?"교통 출금 안내":historical?"이전 명세서":"자동 집계 "+signedWon(amount)));
+        var historyLabel=card.id==="living"?"생활비 수동 장부":card.excludeFromBill?"교통 출금 안내":historical?"이전 명세서":"자동 집계 "+signedWon(amount);
+        name.append(make("strong","",card.name),make("small","",historyLabel));
         value.append(make("strong","",statement?"확정 "+won(statement.amount):historical&&!amount?"—":signedWon(amount)));
-        value.append(make("small","",statement?(historical?"확정액 보관":delta===0?"일치":"차액 "+(delta>0?"+":"")+signedWon(delta)):(card.excludeFromBill?"신용카드 합계 제외":"명세서 미등록")));
+        value.append(make("small","",statement?(historical?"확정액 보관":delta===0?"일치":"차액 "+(delta>0?"+":"")+signedWon(delta)):(card.id==="living"?"생활비 별도 집계":card.excludeFromBill?"신용카드 합계 제외":"명세서 미등록")));
         summary.append(logoFor(card),name,value,make("span","toggle"));
         details.dataset.cardId=card.id; details.open=openCards.has(card.id);
         details.append(summary,detailsFor(card,cycle,true)); host.append(details);
