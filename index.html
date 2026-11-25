@@ -151,7 +151,7 @@
   <div class="app">
     <header class="header">
       <div><h1>11월 자산 관리 현황</h1><p>카드 사용·결제 예정</p></div>
-      <span id="sync-status" class="header-sync" data-state="connecting"><span>11.24. --:-- 연결 중</span><i class="sync-dot" aria-hidden="true"></i></span>
+      <span id="sync-status" class="header-sync" data-state="connecting"><span>연결 중</span><i class="sync-dot" aria-hidden="true"></i></span>
     </header>
     <main>
       <div id="offline-note" class="offline">오프라인 모드입니다. 현재 입력한 내용은 다른 사용자와 공유되지 않으며 새로고침하면 사라질 수 있습니다.</div>
@@ -212,8 +212,10 @@
     };
     const DB_PATH = "finance_dashboard_2026";
     const BILLING_CYCLE = "2026-12-10";
+    const STATEMENT_SWITCH_DAY = 5;
     const BASE_MONTH = "2026-11";
     const SEOUL_DATE = new Intl.DateTimeFormat("sv-SE",{timeZone:"Asia/Seoul",year:"numeric",month:"2-digit",day:"2-digit"});
+    const SEOUL_TIME = new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Seoul",hour:"2-digit",minute:"2-digit",hourCycle:"h23"});
     let activeCycle = BILLING_CYCLE;
     const NAVER_PREPAID_BENEFIT_SPEND = 21140;
     const NAVER_EXCLUDED_BENEFIT_SPEND = 11620;
@@ -222,7 +224,7 @@
     let firebaseReady = false;
     let firebaseApi = null;
     let syncState = "connecting";
-    let lastSyncedAt = null;
+    let lastDataChangeAt = 0;
 
     const ICONS = {
       shinhan:"https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/94/26/68/9426681f-caa0-0f24-0271-15b57dea1e25/AppIcon-0-0-1x_U007emarketing-0-6-0-85-220.png/128x128bb.jpg",
@@ -278,8 +280,15 @@
       var parts=month.split("-"), index=Number(parts[0])*12+Number(parts[1])-1+offset;
       return Math.floor(index/12)+"-"+month2(index%12+1);
     }
-    function currentBillingCycle(day){
-      return shiftMonth(day.slice(0,7),Number(day.slice(8))>10?1:0)+"-10";
+    function billingView(day){
+      var month=day.slice(0,7), latest=shiftMonth(month,Number(day.slice(8))>=STATEMENT_SWITCH_DAY?1:0)+"-10";
+      var cycle=BILLING_CYCLE, missing=[];
+      while(cycle<latest){
+        missing=CARDS.filter(card=>!card.excludeFromBill&&!statementFor(card,cycle));
+        if(missing.length) break;
+        cycle=shiftMonth(cycle.slice(0,7),1)+"-10";
+      }
+      return {cycle:cycle,missing:missing};
     }
     function billingLabel(cycle){return Number(cycle.slice(5,7))+"월 10일";}
     function itemCycle(item){
@@ -347,15 +356,27 @@
       });
       return transactions.concat(messages);
     }
+    function latestDataChange(data){
+      var latest=0;
+      for(var collection of [data.transactions,data.updates,data.messages]){
+        for(var item of Object.values(collection||{})){
+          for(var value of [item?.createdAt,item?.updatedAt,item?.processedAt]){
+            if(Number.isFinite(value)&&value>0&&value<=8640000000000000) latest=Math.max(latest,value);
+          }
+        }
+      }
+      return latest;
+    }
     function renderHeader(){
       var month=SEOUL_DATE.format(new Date()).slice(5,7);
       document.title=Number(month)+"월 자산 관리 현황";
       document.querySelector(".header h1").textContent=document.title;
       var box=document.getElementById("sync-status");
-      var synced=lastSyncedAt&&new Date(lastSyncedAt),date=synced?month2(synced.getMonth()+1)+"."+month2(synced.getDate())+".":"11.24.";
-      var time=synced?month2(synced.getHours())+":"+month2(synced.getMinutes()):"--:--";
+      var synced=lastDataChangeAt?new Date(lastDataChangeAt):null;
+      var stamp=synced?SEOUL_DATE.format(synced).slice(5).replace("-",".")+". "+SEOUL_TIME.format(synced):"";
       var labels={connecting:"연결 중",online:"동기화",offline:"오프라인",error:"동기화 오류"};
-      box.dataset.state=syncState; box.querySelector("span").textContent=date+" "+time+" "+labels[syncState];
+      box.dataset.state=syncState;
+      box.querySelector("span").textContent=stamp?stamp+" "+labels[syncState]:syncState==="online"?"변경 기록 없음":labels[syncState];
       document.getElementById("offline-note").classList.toggle("show",syncState==="offline"||syncState==="error");
     }
     function summaryCard(label,value,note,className){
@@ -370,7 +391,9 @@
       var mom=cardAmount(CARDS.find(function(card){return card.id==="hyundai_mom";}));
       var pocket=cardAmount(CARDS.find(function(card){return card.id==="hyundai_mine";}))+cardAmount(CARDS.find(function(card){return card.id==="shinhan";}));
       var count=unresolved().length;
-      host.append(summaryCard(billingLabel(activeCycle)+" 전체 카드값",signedWon(mine+mom),"수집 기준 잠정 집계 · 확정액은 월별 기록","total"));
+      var view=billingView(SEOUL_DATE.format(new Date()));
+      var note=view.missing.length?"명세서 "+view.missing.length+"건 확인 대기 · 월별 기록":"수집 기준 잠정 집계 · 확정액은 월별 기록";
+      host.append(summaryCard(billingLabel(activeCycle)+" 전체 카드값",signedWon(mine+mom),note,"total"));
       host.append(summaryCard("내 카드",signedWon(mine),"신한 · 네이버 · 현대 MM · 삼성",""));
       host.append(summaryCard("엄마 카드",signedWon(mom),"현대 MM",""));
       host.append(summaryCard("내 용돈 지출",signedWon(pocket),"잔액: "+signedWon(400000-pocket),"pocket"));
@@ -544,7 +567,8 @@
     }
     function renderMonthlyHistory(){
       var monthSelect=document.getElementById("billing-month"), previous=monthSelect.value;
-      var cycles=[...new Set([activeCycle,BILLING_CYCLE,...Object.values(effectiveTransactions()).map(itemCycle)])]
+      var currentMonth=SEOUL_DATE.format(new Date()).slice(0,7);
+      var cycles=[...new Set([activeCycle,BILLING_CYCLE,shiftMonth(currentMonth,1)+"-10",...Object.values(effectiveTransactions()).map(itemCycle)])]
         .filter(cycle=>/^20\d\d-(0[1-9]|1[0-2])-10$/.test(cycle||"")).sort().reverse();
       if(!previous||Array.from(monthSelect.options).map(option=>option.value).join()!==cycles.join()){
         monthSelect.replaceChildren(...cycles.map(cycle=>new Option(cycle.slice(0,4)+"년 "+billingLabel(cycle),cycle)));
@@ -586,7 +610,7 @@
       finally{button.disabled=false;}
     }
     function renderAll(){
-      activeCycle=currentBillingCycle(SEOUL_DATE.format(new Date()));
+      activeCycle=billingView(SEOUL_DATE.format(new Date())).cycle;
       renderHeader(); renderForm(); renderList(); renderSummary(); renderUpdateHistory(); renderBenefits(); renderMonthlyHistory();
     }
     async function persistTransaction(key,updated,previous){
@@ -640,7 +664,7 @@
         dbModule.onValue(dataRef,function(snapshot){
           records={transactions:{},updates:{},messages:{}};
           if(snapshot.exists()){var value=snapshot.val()||{}; records.transactions=value.transactions||{}; records.updates=value.updates||{}; records.messages=value.messages||{};}
-          firebaseReady=true; syncState="online"; lastSyncedAt=Date.now(); renderAll();
+          firebaseReady=true; syncState="online"; lastDataChangeAt=latestDataChange(records); renderAll();
         },function(){firebaseReady=false;syncState="error";renderAll();});
       }catch(error){firebaseReady=false;syncState="offline";renderAll();}
     })();
