@@ -418,6 +418,17 @@
     function affectsCardTotal(item){
       return item.affectsBill!==false&&!/중[간도]\s*납[부입]|중도\s*입금/.test((item.detail||"")+" "+(item.merchant||""));
     }
+    function cardPurchaseAmount(cardId,month){
+      return Object.values(effectiveTransactions()).reduce(function(sum,item){
+        if(item.cardId!==cardId||transactionMonth(item)!==month||!affectsCardTotal(item)) return sum;
+        if(item.recordType&&item.recordType!=="transaction") return sum;
+        return sum+(Number(item.amount)||0);
+      },0);
+    }
+    function pocketAmount(month){
+      return cardPurchaseAmount("shinhan",month)+cardPurchaseAmount("hyundai_mine",month)
+        +cardAmount(CARDS.find(card=>card.id==="kbank"),month+"-10");
+    }
     function signedWon(value){return (value<0?"−":"")+won(value);}
     function statementFor(card,cycle){
       return Object.values(effectiveTransactions()).filter(item=>item.cardId===card.id&&item.billingCycle===cycle&&item.recordType==="statement"&&item.status==="confirmed")
@@ -481,12 +492,12 @@
       var mine=CARDS.filter(function(card){return !["hyundai_mom","kbank","living"].includes(card.id);}).reduce(function(sum,card){return sum+cardAmount(card);},0);
       var mom=cardAmount(CARDS.find(function(card){return card.id==="hyundai_mom";}));
       var living=cardAmount(CARDS.find(function(card){return card.id==="living";}));
-      var pocket=cardAmount(CARDS.find(function(card){return card.id==="hyundai_mine";}))+cardAmount(CARDS.find(function(card){return card.id==="shinhan";}))+cardAmount(CARDS.find(function(card){return card.id==="kbank";}));
+      var pocketMonth=SEOUL_DATE.format(new Date()).slice(0,7), pocket=pocketAmount(pocketMonth);
       var count=unresolved().length;
       host.append(summaryCard(billingLabel(activeCycle)+" 전체 카드값",signedWon(mine+mom),"반영된 이용내역 합계 · 월별 명세서에서 비교","total"));
       host.append(summaryCard("내 카드",signedWon(mine),"신한 · 네이버 · 현대 MM · 삼성",""));
       host.append(summaryCard("생활비 잔액",signedWon(LIVING_EXPENSE.budget-living),"사용: "+signedWon(living)+" · 80만원 기준",""));
-      host.append(summaryCard("내 용돈 잔액",signedWon(400000-pocket),"사용: "+signedWon(pocket)+" · 40만원 기준","pocket"));
+      host.append(summaryCard("내 용돈 잔액",signedWon(400000-pocket),Number(pocketMonth.slice(5))+"월 사용: "+signedWon(pocket)+" · 40만원 기준","pocket"));
       var answer=make("button","summary-card answer"+(count?"":" clear")); answer.type="button";
       answer.append(make("span","summary-label","답변 필요"),make("strong","summary-value",count+"건"),make("small","summary-note",count?"확인하기":"확인 완료"));
       answer.addEventListener("click",function(){document.getElementById("review-section").scrollIntoView({behavior:"smooth",block:"start"});});
@@ -498,12 +509,29 @@
       else { var image=document.createElement("img"); image.src=ICONS[card.icon]; image.alt=card.company; logo.append(image); }
       return logo;
     }
-    function meterFor(card){
+    function meterFor(card,spend){
       if(!card.performance&&!card.installment) return null;
-      var current=card.performance?(card.id==="naver"?naverBenefitSpend():Math.max(0,cardAmount(card))):card.installment.paid;
+      var current=card.performance?Math.max(0,spend):card.installment.paid;
       var target=card.performance?card.performance.target:card.installment.total;
       var meter=make("span","meter"); meter.style.setProperty("--progress",Math.min(100,current/target*100)+"%");
       meter.style.setProperty("--meter",card.id==="naver"?"#159b70":"#2775df"); meter.append(make("i")); return meter;
+    }
+    function transactionRow(item){
+      var li=make("li",item.questionRequired&&!item.resolved?"pending-row":"");
+      li.append(make("time","",item.date||""),make("span","",item.detail||item.merchant||"확인 필요"),
+        make("strong",item.credit||Number(item.amount)<0?"credit":"",signedWon(Number(item.amount)||0)));
+      return li;
+    }
+    function appendUpcomingPayments(wrap,card,cycle){
+      var cycles=[...new Set(Object.values(effectiveTransactions()).filter(item=>item.cardId===card.id&&item.recordType!=="statement")
+        .map(itemCycle).filter(next=>/^20\d\d-(0[1-9]|1[0-2])-10$/.test(next||"")&&next>cycle))].sort();
+      cycles.forEach(function(next){
+        var items=billingItems(card.id,next).filter(item=>card.id==="kbank"||affectsCardTotal(item)).sort(sortTransactionDates);
+        if(!items.length) return;
+        var list=make("ul","transactions");
+        list.append(...items.map(transactionRow));
+        wrap.append(make("h4","detail-title",next.slice(0,4)+"년 "+billingLabel(next)+" 결제분 · 다음 이용내역"),list);
+      });
     }
     function detailsFor(card,cycle=activeCycle,archive=false){
       var wrap=make("div","detail");
@@ -546,28 +574,23 @@
         if(extras.length){
           wrap.append(make("h4","detail-title","기타 결제"));
           var extraList=make("ul","transactions");
-          extras.forEach(function(item){
-            var merchant=item.detail?item.detail:item.merchant;
-            var li=make("li",item.questionRequired&&!item.resolved?"pending-row":"");
-            li.append(make("time","",item.date||""),make("span","",merchant||"확인 필요"),make("strong",Number(item.amount)<0?"credit":"",(Number(item.amount)<0?"−":"")+won(item.amount)));
-            extraList.append(li);
-          });
+          extraList.append(...extras.map(transactionRow));
           wrap.append(extraList);
         }
         if(!checks.children.length&&!extras.length) wrap.append(make("p","detail-title","이 결제월에 저장된 이용내역이 없습니다."));
+        if(!archive) appendUpcomingPayments(wrap,card,cycle);
         return wrap;
       }
       var list=make("ul","transactions");
       if(card.id==="samsung"&&cycle>BILLING_CYCLE&&cycle<="2031-03-10"){
         items.push({date:cycle.slice(5,7)+"월",merchant:"테슬라 오토카드할부 (예정)",amount:card.amount});
       }
-      items.sort(sortTransactionDates).forEach(function(item){
-        var merchant=item.detail?item.detail:item.merchant;
-        var li=make("li"); li.append(make("time","",item.date||""),make("span","",merchant||"확인 필요"),make("strong",item.credit||Number(item.amount)<0?"credit":"",(Number(item.amount)<0?"−":"")+won(item.amount))); list.append(li);
-      });
+      list.append(...items.sort(sortTransactionDates).map(transactionRow));
       if(card.id==="kbank"&&items.length){ var burden=make("li"); var net=items.reduce((sum,item)=>sum+Number(item.amount||0),0); burden.append(make("time","","부담"),make("span","","환급 반영 교통비"),make("strong","",signedWon(net))); list.append(burden); }
       if(!items.length) wrap.append(make("p","detail-title","이 결제월에 저장된 내역이 없습니다."));
-      wrap.append(list); return wrap;
+      wrap.append(list);
+      if(!archive) appendUpcomingPayments(wrap,card,cycle);
+      return wrap;
     }
     function expenseMemo(value){return /차지비\s*주유/.test(value||"")?"테슬라 전기충전":normalizeText(value,120);}
     function makeLivingExpenseRow(date,memo,amount){
@@ -575,16 +598,18 @@
     }
     function renderList(){
       var host=document.getElementById("card-list"); var openIds=new Set(Array.from(host.querySelectorAll("details[open]")).map(function(node){return node.dataset.cardId;})); host.replaceChildren();
+      var month=SEOUL_DATE.format(new Date()).slice(0,7);
       CARDS.forEach(function(card){
         var details=make("details",card.installment?"finance-card installment-card":"finance-card"); details.dataset.cardId=card.id; if(openIds.has(card.id)) details.open=true;
         var summary=document.createElement("summary"); var name=make("span","card-name"); name.append(make("small","",card.company),make("strong","",card.name));
         var value=make("span","card-value"); value.append(make("strong","",signedWon(cardAmount(card))));
         var note=card.note||card.point||"";
-        if(card.id==="naver") note="실적 "+naverBenefitSpend().toLocaleString("ko-KR")+" / "+won(card.performance.target);
-        else if(card.performance) note=card.performance.label+" "+cardAmount(card).toLocaleString("ko-KR")+" / "+won(card.performance.target);
+        var spend=card.id==="naver"?naverBenefitSpend():card.performance?cardPurchaseAmount(card.id,month):0;
+        if(card.id==="naver") note="실적 "+spend.toLocaleString("ko-KR")+" / "+won(card.performance.target);
+        else if(card.performance) note=Number(month.slice(5))+"월 "+card.performance.label+" "+spend.toLocaleString("ko-KR")+" / "+won(card.performance.target);
         if(card.installment) note=card.note+" · "+card.installment.paid+"/"+card.installment.total+"회";
         value.append(make("small","",note)); summary.append(logoFor(card),name,value,make("span","toggle"));
-        var meter=meterFor(card); if(meter) summary.append(meter);
+        var meter=meterFor(card,spend); if(meter) summary.append(meter);
         details.append(summary,detailsFor(card)); host.append(details);
       });
     }
