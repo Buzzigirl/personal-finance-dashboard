@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f4f7fb">
-  <title>12월 10일 결제 예정</title>
+  <title>12월 10일 명세서</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -23,6 +23,10 @@
     .app { width:min(100%,700px); min-height:100vh; margin:0 auto; background:var(--page); }
     .header { position:sticky; top:0; z-index:20; min-height:78px; display:flex; align-items:flex-end; justify-content:space-between; gap:12px; padding:20px 16px 13px; border-bottom:1px solid var(--line); background:rgba(255,255,255,.95); backdrop-filter:blur(14px); }
     .header h1 { margin:0; font-size:1.18rem; line-height:1.25; letter-spacing:-.035em; }
+    .cycle-nav { display:flex; align-items:center; gap:4px; }
+    .cycle-nav h1 { white-space:nowrap; }
+    .cycle-nav button { flex:none; width:32px; height:34px; padding:0; border:0; border-radius:8px; background:var(--blue-soft); color:var(--blue); font-size:1.4rem; line-height:1; }
+    .cycle-nav button:disabled { background:var(--soft); color:var(--muted); opacity:.48; cursor:default; }
     .header-sync { flex:none; display:flex; align-items:center; gap:6px; color:var(--muted); font-size:.72rem; font-weight:500; white-space:nowrap; }
     main { padding:12px 10px 38px; }
     .sync-dot { width:8px; height:8px; border-radius:50%; background:#e5a326; }
@@ -138,12 +142,17 @@
     .month-controls select,.month-controls input { min-width:0; max-width:100%; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--text); font:inherit; font-size:.82rem; }
     @media (min-width:701px) { .app { margin-top:20px; margin-bottom:20px; overflow:hidden; border-radius:28px; box-shadow:0 24px 70px rgba(34,53,79,.16); } }
     @media (max-width:360px) { main { padding-left:7px; padding-right:7px; } .finance-card summary { grid-template-columns:38px minmax(0,1fr) auto 18px; } .logo { width:38px; height:38px; } .summary-value { font-size:1rem; } .total .summary-value { font-size:1.32rem; } }
+    @media (max-width:390px) { .header { gap:6px; padding-left:8px; padding-right:8px; flex-wrap:wrap; } .header h1 { font-size:1rem; } .cycle-nav { gap:2px; } .header-sync { margin-left:auto; } }
   </style>
 </head>
 <body>
   <div class="app">
     <header class="header">
-      <div><h1>12월 10일 명세서 기준</h1></div>
+      <nav class="cycle-nav" aria-label="결제월 이동">
+        <button id="previous-cycle" type="button" aria-label="이번 결제월로 돌아가기" disabled>‹</button>
+        <h1 aria-live="polite">12월 10일 명세서</h1>
+        <button id="next-cycle" type="button" aria-label="다음 결제월 보기">›</button>
+      </nav>
       <span id="sync-status" class="header-sync" data-state="connecting"><span>연결 중</span><i class="sync-dot" aria-hidden="true"></i></span>
     </header>
     <main>
@@ -221,10 +230,11 @@
     const SEOUL_TIME = new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Seoul",hour:"2-digit",minute:"2-digit",hourCycle:"h23"});
     const SEOUL_WEEKDAY = new Intl.DateTimeFormat("ko-KR",{timeZone:"Asia/Seoul",weekday:"short"});
     const WELFARE_POINTS = {2026:{granted:395060,used:395060},2027:{expected:"1분기"}};
-    const LIVING_EXPENSE = {budget:800000,openingUsed:534122,entries:[]};
+    const LIVING_EXPENSE = {cycle:BILLING_CYCLE,budget:800000,openingUsed:534122,entries:[]};
     // Previously supplied November MM statement rows absent from the stored itemized ledger.
     const MM_STATEMENT_SPEND_NOT_ITEMIZED = {"2026-11":421400};
     let activeCycle = BILLING_CYCLE;
+    let viewedCycle = null;
     const NAVER_PREPAID_BENEFIT_SPEND = 21140;
     const NAVER_EXCLUDED_BENEFIT_SPEND = 11620;
     let records = { transactions:{}, updates:{}, messages:{} };
@@ -247,7 +257,7 @@
       {id:"hyundai_mom",company:"현대카드",name:"MM · 엄마 카드",amount:1330416,icon:"mm-mom",note:"전액 정산"},
       {id:"samsung",company:"삼성카드",name:"테슬라 할부 카드",amount:764987,icon:"samsung",installment:{paid:8,total:60},note:"2026.4~2031.3"},
       {id:"kbank",company:"케이뱅크",name:"ONE(K-패스) 체크",amount:0,icon:"kbank",note:"후불교통 · 월별 기록",excludeFromBill:true},
-      {id:"living",company:"수동 생활비 장부",name:"생활비카드",amount:LIVING_EXPENSE.openingUsed+LIVING_EXPENSE.entries.reduce((sum,item)=>sum+item.amount,0),icon:"living",note:"잔액 "+(LIVING_EXPENSE.budget-LIVING_EXPENSE.openingUsed-LIVING_EXPENSE.entries.reduce((sum,item)=>sum+item.amount,0)).toLocaleString("ko-KR")+"원 · 80만원 기준",excludeFromBill:true}
+      {id:"living",company:"수동 생활비 장부",name:"생활비카드",amount:LIVING_EXPENSE.openingUsed+LIVING_EXPENSE.entries.reduce((sum,item)=>sum+item.amount,0),icon:"living",excludeFromBill:true}
     ];
     const RECENT_CARD_NAMES = {
       shinhan:"국방신한카드",naver:"네이버카드",hyundai_mine:"현대MM내것",hyundai_mom:"현대MM엄마",
@@ -399,6 +409,7 @@
       return {checked:false,date:month.slice(5)+"."+row.day,amount:row.variableAmount?null:row.amount};
     }
     function cardAmount(card,cycle=activeCycle){
+      if(card.id==="living") return cycle===LIVING_EXPENSE.cycle?card.amount:0;
       var scheduledInstallment=card.id==="samsung"&&cycle>=BILLING_CYCLE&&cycle<="2031-03-10";
       var total=cycle===BILLING_CYCLE||scheduledInstallment?card.amount:0;
       var items=billingItems(card.id,cycle);
@@ -425,9 +436,9 @@
         return sum+(Number(item.amount)||0);
       },0);
     }
-    function pocketAmount(month){
-      return cardPurchaseAmount("shinhan",month)+cardPurchaseAmount("hyundai_mine",month)
-        +cardAmount(CARDS.find(card=>card.id==="kbank"),month+"-10");
+    function pocketAmount(cycle){
+      return CARDS.filter(card=>["shinhan","hyundai_mine","kbank"].includes(card.id))
+        .reduce((total,card)=>total+cardAmount(card,cycle),0);
     }
     function signedWon(value){return (value<0?"−":"")+won(value);}
     function statementFor(card,cycle){
@@ -471,9 +482,11 @@
       var date=new Date(timestamp);
       return SEOUL_DATE.format(date).slice(5).replace("-",".")+".("+SEOUL_WEEKDAY.format(date)+") "+SEOUL_TIME.format(date);
     }
-    function renderHeader(event){
-      document.title=billingLabel(activeCycle)+" 결제 예정";
+    function renderHeader(event,current){
+      document.title=billingLabel(activeCycle)+" 명세서";
       document.querySelector(".header h1").textContent=document.title;
+      document.getElementById("previous-cycle").disabled=activeCycle===current;
+      document.getElementById("next-cycle").disabled=activeCycle!==current;
       var box=document.getElementById("sync-status");
       var stamp=event?syncStamp(event.at):"";
       var labels={connecting:"연결 중",online:"동기화",offline:"오프라인",error:"동기화 오류"};
@@ -492,12 +505,12 @@
       var mine=CARDS.filter(function(card){return !["hyundai_mom","kbank","living"].includes(card.id);}).reduce(function(sum,card){return sum+cardAmount(card);},0);
       var mom=cardAmount(CARDS.find(function(card){return card.id==="hyundai_mom";}));
       var living=cardAmount(CARDS.find(function(card){return card.id==="living";}));
-      var pocketMonth=SEOUL_DATE.format(new Date()).slice(0,7), pocket=pocketAmount(pocketMonth);
+      var pocket=pocketAmount(activeCycle);
       var count=unresolved().length;
       host.append(summaryCard(billingLabel(activeCycle)+" 전체 카드값",signedWon(mine+mom),"반영된 이용내역 합계 · 월별 명세서에서 비교","total"));
       host.append(summaryCard("내 카드",signedWon(mine),"신한 · 네이버 · 현대 MM · 삼성",""));
       host.append(summaryCard("생활비 잔액",signedWon(LIVING_EXPENSE.budget-living),"사용: "+signedWon(living)+" · 80만원 기준",""));
-      host.append(summaryCard("내 용돈 잔액",signedWon(400000-pocket),Number(pocketMonth.slice(5))+"월 사용: "+signedWon(pocket)+" · 40만원 기준","pocket"));
+      host.append(summaryCard("내 용돈 잔액",signedWon(400000-pocket),"사용: "+signedWon(pocket)+" · 40만원 기준","pocket"));
       var answer=make("button","summary-card answer"+(count?"":" clear")); answer.type="button";
       answer.append(make("span","summary-label","답변 필요"),make("strong","summary-value",count+"건"),make("small","summary-note",count?"확인하기":"확인 완료"));
       answer.addEventListener("click",function(){document.getElementById("review-section").scrollIntoView({behavior:"smooth",block:"start"});});
@@ -522,17 +535,6 @@
         make("strong",item.credit||Number(item.amount)<0?"credit":"",signedWon(Number(item.amount)||0)));
       return li;
     }
-    function appendUpcomingPayments(wrap,card,cycle){
-      var cycles=[...new Set(Object.values(effectiveTransactions()).filter(item=>item.cardId===card.id&&item.recordType!=="statement")
-        .map(itemCycle).filter(next=>/^20\d\d-(0[1-9]|1[0-2])-10$/.test(next||"")&&next>cycle))].sort();
-      cycles.forEach(function(next){
-        var items=billingItems(card.id,next).filter(item=>card.id==="kbank"||affectsCardTotal(item)).sort(sortTransactionDates);
-        if(!items.length) return;
-        var list=make("ul","transactions");
-        list.append(...items.map(transactionRow));
-        wrap.append(make("h4","detail-title",next.slice(0,4)+"년 "+billingLabel(next)+" 결제분 · 다음 이용내역"),list);
-      });
-    }
     function detailsFor(card,cycle=activeCycle,archive=false){
       var wrap=make("div","detail");
       var items=billingItems(card.id,cycle);
@@ -548,6 +550,10 @@
         });
       }
       if(card.id==="living"){
+        if(cycle!==LIVING_EXPENSE.cycle){
+          wrap.append(make("p","detail-title","이 결제월에 등록된 생활비가 없습니다."));
+          return wrap;
+        }
         var livingList=make("ul","transactions");
         livingList.append(makeLivingExpenseRow("현재","현재까지 사용 합계",LIVING_EXPENSE.openingUsed));
         LIVING_EXPENSE.entries.forEach(function(entry){livingList.append(makeLivingExpenseRow(entry.date,entry.memo,entry.amount));});
@@ -578,7 +584,6 @@
           wrap.append(extraList);
         }
         if(!checks.children.length&&!extras.length) wrap.append(make("p","detail-title","이 결제월에 저장된 이용내역이 없습니다."));
-        if(!archive) appendUpcomingPayments(wrap,card,cycle);
         return wrap;
       }
       var list=make("ul","transactions");
@@ -589,7 +594,6 @@
       if(card.id==="kbank"&&items.length){ var burden=make("li"); var net=items.reduce((sum,item)=>sum+Number(item.amount||0),0); burden.append(make("time","","부담"),make("span","","환급 반영 교통비"),make("strong","",signedWon(net))); list.append(burden); }
       if(!items.length) wrap.append(make("p","detail-title","이 결제월에 저장된 내역이 없습니다."));
       wrap.append(list);
-      if(!archive) appendUpcomingPayments(wrap,card,cycle);
       return wrap;
     }
     function expenseMemo(value){return /차지비\s*주유/.test(value||"")?"테슬라 전기충전":normalizeText(value,120);}
@@ -602,8 +606,9 @@
       CARDS.forEach(function(card){
         var details=make("details",card.installment?"finance-card installment-card":"finance-card"); details.dataset.cardId=card.id; if(openIds.has(card.id)) details.open=true;
         var summary=document.createElement("summary"); var name=make("span","card-name"); name.append(make("small","",card.company),make("strong","",card.name));
-        var value=make("span","card-value"); value.append(make("strong","",signedWon(cardAmount(card))));
+        var amount=cardAmount(card), value=make("span","card-value"); value.append(make("strong","",signedWon(amount)));
         var note=card.note||card.point||"";
+        if(card.id==="living") note="잔액 "+signedWon(LIVING_EXPENSE.budget-amount)+" · 80만원 기준";
         var spend=card.id==="naver"?naverBenefitSpend():card.performance?cardPurchaseAmount(card.id,month):0;
         if(card.id==="naver") note="실적 "+spend.toLocaleString("ko-KR")+" / "+won(card.performance.target);
         else if(card.performance) note=Number(month.slice(5))+"월 "+card.performance.label+" "+spend.toLocaleString("ko-KR")+" / "+won(card.performance.target);
@@ -737,14 +742,16 @@
         "전월 카드 사용 30만원 이상이면 추가 교통 혜택이 최대 5,000원"
       ],"https://www.kbanknow.com/web/service/benefit-detail/1683","10월 교통비는 5만원 미만이므로 추가 교통 이벤트 기준에는 미달합니다. K-패스 환급 10,940원은 별도로 반영돼 있습니다."));
     }
-    function renderMonthlyHistory(){
+    function renderMonthlyHistory(followActive=false){
       var monthSelect=document.getElementById("billing-month"), previous=monthSelect.value;
-      var cycles=[...new Set([activeCycle,BILLING_CYCLE,shiftMonth(activeCycle.slice(0,7),1)+"-10",...Object.values(effectiveTransactions()).map(itemCycle)])]
+      var current=currentBillingCycle(SEOUL_DATE.format(new Date()));
+      var cycles=[...new Set([current,activeCycle,BILLING_CYCLE,shiftMonth(current.slice(0,7),1)+"-10",...Object.values(effectiveTransactions()).map(itemCycle)])]
         .filter(cycle=>/^20\d\d-(0[1-9]|1[0-2])-10$/.test(cycle||"")).sort().reverse();
       if(!previous||Array.from(monthSelect.options).map(option=>option.value).join()!==cycles.join()){
         monthSelect.replaceChildren(...cycles.map(cycle=>new Option(cycle.slice(0,4)+"년 "+billingLabel(cycle),cycle)));
         monthSelect.value=cycles.includes(previous)?previous:activeCycle;
       }
+      if(followActive) monthSelect.value=activeCycle;
       var cycle=monthSelect.value, host=document.getElementById("monthly-history");
       var openCards=new Set(Array.from(host.querySelectorAll("details[open]")).map(node=>node.dataset.cardId));
       host.replaceChildren();
@@ -782,10 +789,20 @@
       }catch(error){status.textContent="저장하지 못했습니다. 연결 상태를 확인해주세요.";}
       finally{button.disabled=false;}
     }
+    function renderBillingView(event,followActive=false){
+      var current=currentBillingCycle(SEOUL_DATE.format(new Date()));
+      if(viewedCycle&&viewedCycle<=current) viewedCycle=null;
+      activeCycle=viewedCycle||current;
+      renderHeader(event,current); renderList(); renderSummary(); renderBenefits(); renderMonthlyHistory(followActive);
+    }
+    function chooseBillingView(next){
+      var current=currentBillingCycle(SEOUL_DATE.format(new Date()));
+      viewedCycle=next?shiftMonth(current.slice(0,7),1)+"-10":null;
+      renderBillingView(latestReference(),true);
+    }
     function renderAll(){
-      activeCycle=currentBillingCycle(SEOUL_DATE.format(new Date()));
       var event=latestReference();
-      renderHeader(event); renderForm(); renderList(); renderSummary(); renderReference(event); renderBenefits(); renderMonthlyHistory();
+      renderBillingView(event); renderForm(); renderReference(event);
     }
     async function persistTransaction(key,updated,previous){
       records.transactions[key]=updated; renderAll();
@@ -822,7 +839,9 @@
         await firebaseApi.update(firebaseApi.ref(firebaseApi.database,DB_PATH+"/messages/"+messageKey),{status:"processed",updatedAt:Date.now()});
       }catch(error){alert("분석 요청을 저장하지 못했습니다. 연결 상태를 확인해주세요.");}
     }
-    document.getElementById("billing-month").addEventListener("change",renderMonthlyHistory);
+    document.getElementById("previous-cycle").addEventListener("click",()=>chooseBillingView(false));
+    document.getElementById("next-cycle").addEventListener("click",()=>chooseBillingView(true));
+    document.getElementById("billing-month").addEventListener("change",()=>renderMonthlyHistory());
     document.getElementById("statement-card").replaceChildren(...CARDS.filter(card=>!card.excludeFromBill).map(card=>new Option(card.name,card.id)));
     document.getElementById("statement-form").addEventListener("submit",saveStatement);
     document.addEventListener("toggle",function(event){
